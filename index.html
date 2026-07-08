@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trilha de Capacitações — Estat Júnior</title>
+<link rel="icon" type="image/png" sizes="32x32" href="marca.png">
+<link rel="shortcut icon" href="marca.png">
+<link rel="apple-touch-icon" href="marca.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Raleway:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="design.css">
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <img src="marca.png" alt="Estat Júnior" height="44" style="display:block;">
+    <div class="logo-text">
+      <span class="logo-name">Estat Júnior</span>
+      <span class="logo-sub">Trilha de Capacitações</span>
+    </div>
+  </div>
+  <span class="header-badge">Uso interno</span>
+</header>
+
+<section class="hero">
+  <div class="hero-text">
+    <div class="hero-eyebrow">Ferramenta interna</div>
+    <h1>Copiar cursos<br>para <span>membros</span></h1>
+    <p>Duplique qualquer curso — com descrição, link e checklist — direto para o status do membro, com atribuição e notificação automática.</p>
+  </div>
+  <div class="hero-tiger">
+    <img src="estatigrao.png" alt="Tigrão Estat Júnior" width="160" style="display:block; filter: drop-shadow(0 8px 32px rgba(75,174,212,0.2));">
+  </div>
+</section>
+
+<div class="nav-tabs">
+  <button class="nav-tab active" onclick="showTab('copiar')">📋 Copiar cursos</button>
+  <button class="nav-tab" onclick="showTab('dashboard')">📊 Acompanhamento</button>
+</div>
+
+<main class="main">
+
+  <!-- ABA COPIAR -->
+  <div id="tab-copiar">
+
+    <!-- STEP 1 -->
+    <div class="card">
+      <div class="step-header">
+        <div class="step-num" id="num-1">1</div>
+        <div class="step-title">Conectar ao ClickUp</div>
+      </div>
+      <div class="input-row">
+        <input type="password" id="apiKey" placeholder="pk_xxxxxxxxxxxxxxxxxxxx" autocomplete="off"/>
+        <button class="btn btn-blue" onclick="saveKey(); loadWorkspace();">Conectar →</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;">
+        <span id="key-saved-badge" style="display:none;align-items:center;gap:6px;font-size:12px;color:var(--success);background:rgba(62,207,106,0.08);border:1px solid rgba(62,207,106,0.3);padding:4px 12px;border-radius:20px;">
+          🔒 API Key salva neste navegador
+        </span>
+        <button onclick="clearKey()" style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;text-decoration:underline;padding:0;">Limpar key salva</button>
+      </div>
+      <p class="tip">
+        Avatar → <strong style="color:var(--text)">Configurações → Aplicativos</strong> → Token de API pessoal.<br>
+        <a href="https://app.clickup.com/settings/apps" target="_blank">Abrir configurações ↗</a>
+      </p>
+      <div class="msg" id="msg-connect"></div>
+    </div>
+
+    <!-- STEP 2 -->
+    <div class="card section-hidden" id="section-lists">
+      <div class="step-header">
+        <div class="step-num" id="num-2">2</div>
+        <div class="step-title">Confirmar listas</div>
+      </div>
+      <div class="field-label">Lista de Cursos</div>
+      <select id="sel-courses" onchange="loadCourses()"><option value="">— selecione —</option></select>
+      <div class="field-label">Lista de Membros (status = nome do membro)</div>
+      <select id="sel-members" onchange="loadMemberStatuses()"><option value="">— selecione —</option></select>
+      <div class="msg" id="msg-lists"></div>
+    </div>
+
+    <!-- STEP 3 -->
+    <div class="card section-hidden" id="section-courses">
+      <div class="step-header">
+        <div class="step-num" id="num-3">3</div>
+        <div class="step-title">Selecionar cursos</div>
+        <span class="step-count" id="count-courses"></span>
+      </div>
+      <div id="courses-list"><span class="empty">Carregando...</span></div>
+    </div>
+
+    <!-- STEP 4 -->
+    <div class="card section-hidden" id="section-members">
+      <div class="step-header">
+        <div class="step-num" id="num-4">4</div>
+        <div class="step-title">Selecionar membros + vincular usuário</div>
+        <span class="step-count" id="count-members"></span>
+      </div>
+      <div id="members-list"><span class="empty">Carregando...</span></div>
+    </div>
+
+    <!-- STEP 5 -->
+    <div class="card section-hidden" id="section-action">
+      <div class="step-header">
+        <div class="step-num" id="num-5">5</div>
+        <div class="step-title">Duplicar cursos</div>
+      </div>
+      <div class="summary-box" id="summary"></div>
+      <button class="btn btn-blue btn-full" id="btn-copy" onclick="copyCourses()">
+        ✓ &nbsp;Duplicar e atribuir cursos aos membros
+      </button>
+      <div class="progress-wrap" id="progress-wrap">
+        <div class="progress-label" id="progress-label">Processando...</div>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      </div>
+      <div class="msg" id="msg-result"></div>
+      <div class="result-list" id="result-list"></div>
+    </div>
+
+  </div>
+
+  <!-- ABA DASHBOARD -->
+  <div id="tab-dashboard" class="section-hidden">
+    <div class="card">
+      <div class="dash-header-row">
+        <div class="step-header" style="margin-bottom:0">
+          <div class="step-num">📊</div>
+          <div class="step-title">Progresso por membro</div>
+        </div>
+        <button class="btn btn-outline" onclick="loadDashboard()">↻ Atualizar</button>
+      </div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:1rem">
+        Conecte ao ClickUp na aba anterior para visualizar o progresso aqui.
+      </p>
+      <div id="dashboard-body">
+        <div class="dash-loading">Clique em "Atualizar" após conectar.</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  Desenvolvido internamente pela <span>Estat Júnior</span> · UNICAMP
+</footer>
+
+<script src="back.js"></script>
+<script>
+  function showTab(tab) {
+    document.getElementById('tab-copiar').classList.toggle('section-hidden', tab !== 'copiar');
+    document.getElementById('tab-dashboard').classList.toggle('section-hidden', tab !== 'dashboard');
+    document.querySelectorAll('.nav-tab').forEach((btn, i) => {
+      btn.classList.toggle('active', (i === 0 && tab === 'copiar') || (i === 1 && tab === 'dashboard'));
+    });
+    if (tab === 'dashboard') loadDashboard();
+  }
+</script>
+</body>
+</html>
