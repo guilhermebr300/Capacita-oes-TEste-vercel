@@ -42,7 +42,6 @@ function clearManualKey() {
   if (input) input.value = '';
 }
 
-// ── HELPERS ───────────────────────────────────────────────
 function showMsg(id, text, type) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -78,7 +77,6 @@ async function apiPost(path, body) {
   return r.json();
 }
 
-// ── LOGIN ─────────────────────────────────────────────────
 async function handleLogin() {
   const emailInput = document.getElementById('login-email');
   const email = emailInput.value.trim().toLowerCase();
@@ -128,7 +126,6 @@ function showLogin() {
   document.getElementById('app-screen').style.display = 'none';
 }
 
-// ── AUTO CONNECT ──────────────────────────────────────────
 async function autoConnect() {
   showMsg('msg-connect', 'Conectando automaticamente...', 'info');
   // esconde o painel de fallback
@@ -156,7 +153,6 @@ async function connectWithManualKey() {
   }
 }
 
-// ── WORKSPACE ─────────────────────────────────────────────
 async function loadWorkspace() {
   ['section-lists','section-courses','section-members','section-action']
     .forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('section-hidden'); });
