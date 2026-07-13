@@ -10,134 +10,337 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Raleway:wght@700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="design.css">
+<style>
+  /* ── LOGIN SCREEN ── */
+  #login-screen {
+    display: none;
+    min-height: 100vh;
+    align-items: center;
+    justify-content: center;
+    background: var(--black);
+    padding: 2rem;
+  }
+
+  .login-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 2.5rem 2rem;
+    width: 100%;
+    max-width: 400px;
+    text-align: center;
+  }
+
+  .login-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 2rem;
+  }
+
+  .login-logo-text { text-align: left; }
+  .login-logo-name { font-family: 'Raleway', sans-serif; font-weight: 800; font-size: 20px; color: var(--text); display: block; }
+  .login-logo-sub  { font-size: 11px; color: var(--muted); letter-spacing: 0.8px; text-transform: uppercase; }
+
+  .login-tiger {
+    margin: 0 auto 1.5rem;
+    display: block;
+    filter: drop-shadow(0 4px 20px rgba(75,174,212,0.2));
+  }
+
+  .login-title { font-family: 'Raleway', sans-serif; font-size: 22px; font-weight: 800; color: var(--text); margin-bottom: 6px; }
+  .login-sub   { font-size: 13px; color: var(--muted); margin-bottom: 1.5rem; line-height: 1.5; }
+
+  .login-input {
+    width: 100%;
+    height: 46px;
+    background: #0c1118;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0 14px;
+    font-size: 14px;
+    color: var(--text);
+    outline: none;
+    font-family: 'Inter', sans-serif;
+    margin-bottom: 12px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .login-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-glow); }
+
+  .login-btn {
+    width: 100%;
+    height: 46px;
+    background: var(--blue);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .login-btn:hover { background: var(--blue-dark); }
+  .login-btn:active { transform: scale(0.98); }
+  .login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .login-error {
+    display: none;
+    font-size: 13px;
+    color: var(--error);
+    background: rgba(232,80,80,0.08);
+    border: 1px solid rgba(232,80,80,0.3);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    text-align: left;
+  }
+
+  .login-domain-hint {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 12px;
+  }
+  .login-domain-hint span { color: var(--blue); }
+
+  /* ── APP SCREEN ── */
+  #app-screen { display: none; }
+
+  /* user chip no header */
+  .user-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted);
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 5px 12px 5px 8px;
+    border-radius: 20px;
+    cursor: default;
+  }
+  .user-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--blue);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .logout-btn {
+    font-size: 11px;
+    color: var(--muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    margin-left: 4px;
+    text-decoration: underline;
+    font-family: 'Inter', sans-serif;
+  }
+  .logout-btn:hover { color: var(--error); }
+
+  /* fallback API panel */
+  #fallback-panel {
+    display: none;
+    margin-top: 1rem;
+    padding: 1rem;
+    background: rgba(240,180,41,0.06);
+    border: 1px solid rgba(240,180,41,0.25);
+    border-radius: var(--radius);
+  }
+  .fallback-title { font-size: 13px; color: var(--warn); font-weight: 600; margin-bottom: 10px; }
+  .fallback-sub   { font-size: 12px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+</style>
 </head>
 <body>
 
-<header>
-  <div class="logo">
-    <img src="marca.png" alt="Estat Júnior" height="44" style="display:block;">
-    <div class="logo-text">
-      <span class="logo-name">Estat Júnior</span>
-      <span class="logo-sub">Trilha de Capacitações</span>
+<!-- ══ TELA DE LOGIN ══ -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">
+      <img src="marca.png" alt="Estat Júnior" height="48">
+      <div class="login-logo-text">
+        <span class="login-logo-name">Estat Júnior</span>
+        <span class="login-logo-sub">Trilha de Capacitações</span>
+      </div>
     </div>
-  </div>
-  <span class="header-badge">Uso interno</span>
-</header>
 
-<section class="hero">
-  <div class="hero-text">
-    <div class="hero-eyebrow">Ferramenta interna</div>
-    <h1>Copiar cursos<br>para <span>membros</span></h1>
-    <p>Vai criar o curso dentro do membro (la ele) .</p>
-  </div>
-  <div class="hero-tiger">
-    <img src="estatigrao.png" alt="Tigrão Estat Júnior" width="160" style="display:block; filter: drop-shadow(0 8px 32px rgba(75,174,212,0.2));">
-  </div>
-</section>
+    <img src="estatigrao.png" alt="Tigrão" width="110" class="login-tiger">
 
-<div class="nav-tabs">
-  <button class="nav-tab active" onclick="showTab('copiar')">📋 Copiar cursos</button>
-  <button class="nav-tab" onclick="showTab('dashboard')">📊 Acompanhamento</button>
+    <div class="login-title">Bem-vindo!</div>
+    <p class="login-sub">Digite seu email institucional para acessar a ferramenta de capacitações.</p>
+
+    <div class="login-error" id="login-error"></div>
+
+    <input
+      class="login-input"
+      type="email"
+      id="login-email"
+      placeholder="seu@estatjr.com.br"
+      autocomplete="email"
+      onkeydown="if(event.key==='Enter') handleLogin()"
+    />
+
+    <button class="login-btn" id="btn-login" onclick="handleLogin()">
+      Entrar →
+    </button>
+
+    <p class="login-domain-hint">Acesso restrito a <span>@estatjr.com.br</span></p>
+  </div>
 </div>
 
-<main class="main">
+<!-- ══ APP ══ -->
+<div id="app-screen">
 
-  <div id="tab-copiar">
-
-    <div class="card">
-      <div class="step-header">
-        <div class="step-num" id="num-1">1</div>
-        <div class="step-title">Conectar ao ClickUp</div>
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <img src="marca.png" alt="Estat Júnior" height="44" style="display:block;">
+      <div class="logo-text">
+        <span class="logo-name">Estat Júnior</span>
+        <span class="logo-sub">Trilha de Capacitações</span>
       </div>
-      <div class="input-row">
-        <input type="password" id="apiKey" placeholder="pk_xxxxxxxxxxxxxxxxxxxx" autocomplete="off"/>
-        <button class="btn btn-blue" onclick="saveKey(); loadWorkspace();">Conectar →</button>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;">
-        <span id="key-saved-badge" style="display:none;align-items:center;gap:6px;font-size:12px;color:var(--success);background:rgba(62,207,106,0.08);border:1px solid rgba(62,207,106,0.3);padding:4px 12px;border-radius:20px;">
-          🔒 API Key salva neste navegador
-        </span>
-        <button onclick="clearKey()" style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;text-decoration:underline;padding:0;">Limpar key salva</button>
-      </div>
-      <p class="tip">
-        Avatar → <strong style="color:var(--text)">Configurações → Aplicativos</strong> → Token de API pessoal.<br>
-        <a href="https://app.clickup.com/settings/apps" target="_blank">Abrir configurações ↗</a>
-      </p>
-      <div class="msg" id="msg-connect"></div>
     </div>
-
-    <div class="card section-hidden" id="section-lists">
-      <div class="step-header">
-        <div class="step-num" id="num-2">2</div>
-        <div class="step-title">Confirmar listas</div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="user-chip">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <span id="user-email-display"></span>
+        <button class="logout-btn" onclick="logout()">sair</button>
       </div>
-      <div class="field-label">Lista de Cursos</div>
-      <select id="sel-courses" onchange="loadCourses()"><option value="">— selecione —</option></select>
-      <div class="field-label">Lista de Membros (status = nome do membro)</div>
-      <select id="sel-members" onchange="loadMemberStatuses()"><option value="">— selecione —</option></select>
-      <div class="msg" id="msg-lists"></div>
     </div>
+  </header>
 
-    <div class="card section-hidden" id="section-courses">
-      <div class="step-header">
-        <div class="step-num" id="num-3">3</div>
-        <div class="step-title">Selecionar cursos</div>
-        <span class="step-count" id="count-courses"></span>
-      </div>
-      <div id="courses-list"><span class="empty">Carregando...</span></div>
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-text">
+      <div class="hero-eyebrow">Ferramenta interna</div>
+      <h1>Copiar cursos<br>para <span>membros</span></h1>
+      <p>Duplique qualquer curso — com descrição, link e checklist — direto para o status do membro, com atribuição e notificação automática.</p>
     </div>
-
-    <div class="card section-hidden" id="section-members">
-      <div class="step-header">
-        <div class="step-num" id="num-4">4</div>
-        <div class="step-title">Selecionar membros + vincular usuário</div>
-        <span class="step-count" id="count-members"></span>
-      </div>
-      <div id="members-list"><span class="empty">Carregando...</span></div>
+    <div class="hero-tiger">
+      <img src="estatigrao.png" alt="Tigrão" width="160" style="display:block;filter:drop-shadow(0 8px 32px rgba(75,174,212,0.2));">
     </div>
+  </section>
 
-    <div class="card section-hidden" id="section-action">
-      <div class="step-header">
-        <div class="step-num" id="num-5">5</div>
-        <div class="step-title">Duplicar cursos</div>
-      </div>
-      <div class="summary-box" id="summary"></div>
-      <button class="btn btn-blue btn-full" id="btn-copy" onclick="copyCourses()">
-        ✓ &nbsp;Duplicar e atribuir cursos aos membros
-      </button>
-      <div class="progress-wrap" id="progress-wrap">
-        <div class="progress-label" id="progress-label">Processando...</div>
-        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-      </div>
-      <div class="msg" id="msg-result"></div>
-      <div class="result-list" id="result-list"></div>
-    </div>
-
+  <!-- NAV TABS -->
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showTab('copiar')">📋 Copiar cursos</button>
+    <button class="nav-tab" onclick="showTab('dashboard')">📊 Acompanhamento</button>
   </div>
 
-  <div id="tab-dashboard" class="section-hidden">
-    <div class="card">
-      <div class="dash-header-row">
+  <main class="main">
+
+    <!-- ABA COPIAR -->
+    <div id="tab-copiar">
+
+      <!-- STATUS CONEXÃO -->
+      <div class="card">
         <div class="step-header" style="margin-bottom:0">
-          <div class="step-num">📊</div>
-          <div class="step-title">Progresso por membro</div>
+          <div class="step-num" id="num-1">1</div>
+          <div class="step-title">Conexão com ClickUp</div>
         </div>
-        <button class="btn btn-outline" onclick="loadDashboard()">↻ Atualizar</button>
+        <div class="msg" id="msg-connect"></div>
+
+        <!-- Fallback: aparece só se a conexão automática falhar -->
+        <div id="fallback-panel">
+          <div class="fallback-title">⚠ Falha na conexão automática</div>
+          <p class="fallback-sub">A API Key configurada no servidor pode estar desatualizada. Cole sua API Key pessoal abaixo para continuar:</p>
+          <div class="input-row">
+            <input type="password" id="apiKey" placeholder="pk_xxxxxxxxxxxxxxxxxxxx" autocomplete="off"/>
+            <button class="btn btn-blue" onclick="connectWithManualKey()">Conectar →</button>
+          </div>
+          <p class="tip" style="margin-top:8px">
+            Avatar → <strong style="color:var(--text)">Configurações → Aplicativos</strong> → Token de API pessoal.<br>
+            <a href="https://app.clickup.com/settings/apps" target="_blank">Abrir configurações ↗</a>
+          </p>
+        </div>
       </div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:1rem">
-        Conecte ao ClickUp na aba anterior para visualizar o progresso aqui.
-      </p>
-      <div id="dashboard-body">
-        <div class="dash-loading">Clique em "Atualizar" após conectar.</div>
+
+      <!-- STEP 2 -->
+      <div class="card section-hidden" id="section-lists">
+        <div class="step-header">
+          <div class="step-num" id="num-2">2</div>
+          <div class="step-title">Confirmar listas</div>
+        </div>
+        <div class="field-label">Lista de Cursos</div>
+        <select id="sel-courses" onchange="loadCourses()"><option value="">— selecione —</option></select>
+        <div class="field-label">Lista de Membros</div>
+        <select id="sel-members" onchange="loadMemberStatuses()"><option value="">— selecione —</option></select>
+        <div class="msg" id="msg-lists"></div>
+      </div>
+
+      <!-- STEP 3 -->
+      <div class="card section-hidden" id="section-courses">
+        <div class="step-header">
+          <div class="step-num" id="num-3">3</div>
+          <div class="step-title">Selecionar cursos</div>
+          <span class="step-count" id="count-courses"></span>
+        </div>
+        <div id="courses-list"><span class="empty">Carregando...</span></div>
+      </div>
+
+      <!-- STEP 4 -->
+      <div class="card section-hidden" id="section-members">
+        <div class="step-header">
+          <div class="step-num" id="num-4">4</div>
+          <div class="step-title">Selecionar membros + vincular usuário</div>
+          <span class="step-count" id="count-members"></span>
+        </div>
+        <div id="members-list"><span class="empty">Carregando...</span></div>
+      </div>
+
+      <!-- STEP 5 -->
+      <div class="card section-hidden" id="section-action">
+        <div class="step-header">
+          <div class="step-num" id="num-5">5</div>
+          <div class="step-title">Duplicar cursos</div>
+        </div>
+        <div class="summary-box" id="summary"></div>
+        <button class="btn btn-blue btn-full" id="btn-copy" onclick="copyCourses()">
+          ✓ &nbsp;Duplicar e atribuir cursos aos membros
+        </button>
+        <div class="progress-wrap" id="progress-wrap">
+          <div class="progress-label" id="progress-label">Processando...</div>
+          <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        </div>
+        <div class="msg" id="msg-result"></div>
+        <div class="result-list" id="result-list"></div>
+      </div>
+
+    </div><!-- /tab-copiar -->
+
+    <!-- ABA DASHBOARD -->
+    <div id="tab-dashboard" class="section-hidden">
+      <div class="card">
+        <div class="dash-header-row">
+          <div class="step-header" style="margin-bottom:0">
+            <div class="step-num">📊</div>
+            <div class="step-title">Progresso por membro</div>
+          </div>
+          <button class="btn btn-outline" onclick="loadDashboard()">↻ Atualizar</button>
+        </div>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:1rem">
+          Progresso em tempo real baseado nos checklists do ClickUp.
+        </p>
+        <div id="dashboard-body">
+          <div class="dash-loading">Clique em "Atualizar" para carregar.</div>
+        </div>
       </div>
     </div>
-  </div>
 
-</main>
+  </main>
 
-<footer>
-  Desenvolvido internamente pela <span>Estat Júnior</span> · UNICAMP
-</footer>
+  <footer>
+    Desenvolvido internamente pela <span>Estat Júnior</span> · UNICAMP
+  </footer>
+
+</div><!-- /app-screen -->
 
 <script src="back.js"></script>
 <script>
@@ -145,10 +348,23 @@
     document.getElementById('tab-copiar').classList.toggle('section-hidden', tab !== 'copiar');
     document.getElementById('tab-dashboard').classList.toggle('section-hidden', tab !== 'dashboard');
     document.querySelectorAll('.nav-tab').forEach((btn, i) => {
-      btn.classList.toggle('active', (i === 0 && tab === 'copiar') || (i === 1 && tab === 'dashboard'));
+      btn.classList.toggle('active', (i===0&&tab==='copiar')||(i===1&&tab==='dashboard'));
     });
     if (tab === 'dashboard') loadDashboard();
   }
+
+  // atualiza avatar com inicial do email
+  const _origShowApp = window.showApp;
+  document.addEventListener('DOMContentLoaded', () => {
+    const obs = new MutationObserver(() => {
+      const emailEl = document.getElementById('user-email-display');
+      const avatarEl = document.getElementById('user-avatar');
+      if (emailEl && avatarEl && emailEl.textContent) {
+        avatarEl.textContent = emailEl.textContent[0].toUpperCase();
+      }
+    });
+    obs.observe(document.getElementById('user-email-display'), { childList: true, characterData: true, subtree: true });
+  });
 </script>
 </body>
 </html>
