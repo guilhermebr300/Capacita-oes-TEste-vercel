@@ -1,4 +1,3 @@
-/* ── TOKENS ── */
 :root {
   --sky:         #5BB8F5;
   --sky-dark:    #2E96D9;
@@ -36,7 +35,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── HEADER ── */
 header {
   background: linear-gradient(135deg, #2E96D9 0%, #5BB8F5 100%);
   padding: 0 2rem;
@@ -236,7 +234,6 @@ select option { background: #fff; color: var(--text); }
 .btn-outline:hover { background: var(--sky-light); border-color: var(--sky-dark); }
 .btn-full { width: 100%; height: 48px; font-size: 15px; justify-content: center; }
 
-/* ── MSGS ── */
 .msg { margin-top: 12px; padding: 10px 14px; border-radius: var(--radius); font-size: 13px; display: none; border-left: 3px solid transparent; }
 .msg.show { display: block; }
 .msg.info    { background: var(--sky-light); color: var(--sky-deeper); border-color: var(--sky); }
@@ -244,7 +241,6 @@ select option { background: #fff; color: var(--text); }
 .msg.error   { background: var(--error-bg);   color: var(--error);   border-color: var(--error); }
 .msg.warn    { background: var(--warn-bg);    color: var(--warn);    border-color: #E0A020; }
 
-/* ── CHECKLIST ── */
 .list-grid { display: grid; gap: 7px; margin-top: 8px; }
 .check-item {
   display: flex; align-items: center; gap: 12px;
@@ -282,19 +278,16 @@ select option { background: #fff; color: var(--text); }
 .empty { font-size: 13px; color: var(--muted); padding: 8px 0; text-align: center; }
 .section-hidden { display: none; }
 
-/* ── PROGRESS ── */
 .progress-wrap { margin-top: 16px; display: none; }
 .progress-label { font-size: 12px; color: var(--text-sec); margin-bottom: 8px; font-weight: 500; }
 .progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
 .progress-fill { height: 100%; background: linear-gradient(90deg, #2E96D9, #5BB8F5); border-radius: 3px; transition: width 0.3s; width: 0%; }
 
-/* ── RESULTS ── */
 .result-list { margin-top: 10px; font-size: 13px; max-height: 200px; overflow-y: auto; }
 .result-item { padding: 5px 0; border-bottom: 1px solid var(--border); }
 .result-item.ok  { color: var(--success); }
 .result-item.err { color: var(--error); }
 
-/* ── SUMMARY ── */
 .summary-box {
   background: var(--sky-light); border: 1.5px solid var(--border-mid);
   border-radius: var(--radius); padding: 12px 16px;
@@ -302,7 +295,6 @@ select option { background: #fff; color: var(--text); }
 }
 .summary-box strong { color: var(--sky-deeper); }
 
-/* ── CONN STATUS ── */
 .conn-status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-sec); margin-bottom: 4px; }
 .conn-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: background 0.3s; }
 .conn-dot.connected { background: var(--success); box-shadow: 0 0 0 3px rgba(30,158,90,0.2); }
@@ -310,7 +302,6 @@ select option { background: #fff; color: var(--text); }
 .conn-dot.loading { background: var(--sky); animation: pulse 1.2s infinite; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
 
-/* ── FALLBACK COLLAPSIBLE ── */
 .fallback-toggle {
   display: flex; align-items: center; justify-content: space-between;
   cursor: pointer; padding: 10px 0; user-select: none;
@@ -326,7 +317,6 @@ select option { background: #fff; color: var(--text); }
 @keyframes fadeIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:none} }
 .fallback-sub { font-size: 12px; color: var(--muted); margin-bottom: 10px; line-height: 1.6; }
 
-/* ── DASHBOARD ── */
 .dash-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
 .dash-loading { text-align: center; color: var(--muted); padding: 2rem; font-size: 14px; }
 .dash-member {
@@ -406,7 +396,6 @@ select option { background: #fff; color: var(--text); }
 .login-domain-hint { font-size: 11px; color: var(--muted); margin-top: 14px; }
 .login-domain-hint span { color: var(--sky-darker, var(--sky-dark)); font-weight: 600; }
 
-/* ── FOOTER ── */
 footer {
   text-align: center; padding: 2rem;
   font-size: 12px; color: var(--muted);
@@ -428,7 +417,6 @@ footer span { color: var(--sky-dark); font-weight: 600; }
   .user-chip span { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 
-/* ── DASHBOARD VISUAL ── */
 .dash-summary-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
