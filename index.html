@@ -13,7 +13,6 @@
 </head>
 <body>
 
-<!-- ══ TELA DE LOGIN ══ -->
 <div id="login-screen">
   <div class="login-box">
     <div class="login-logo">
@@ -46,7 +45,6 @@
   </div>
 </div>
 
-<!-- ══ APP ══ -->
 <div id="app-screen">
 
   <!-- HEADER -->
@@ -67,7 +65,6 @@
     </div>
   </header>
 
-  <!-- HERO -->
   <section class="hero">
     <div class="hero-text">
       <div class="hero-eyebrow">Ferramenta interna</div>
@@ -83,7 +80,6 @@
     </div>
   </section>
 
-  <!-- TABS -->
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showTab('copiar')">📋 Copiar cursos</button>
     <button class="nav-tab" onclick="showTab('dashboard')">📊 Acompanhamento</button>
@@ -91,17 +87,14 @@
 
   <main class="main">
 
-    <!-- ══ ABA: COPIAR ══ -->
     <div id="tab-copiar">
 
-      <!-- CONEXÃO -->
       <div class="card">
         <div class="step-header" style="margin-bottom:8px">
           <div class="step-num" id="num-1">1</div>
           <div class="step-title">Conexão com ClickUp</div>
         </div>
 
-        <!-- status visual -->
         <div class="conn-status">
           <div class="conn-dot loading" id="conn-dot"></div>
           <span id="conn-text">Conectando...</span>
@@ -129,7 +122,6 @@
         </div>
       </div>
 
-      <!-- STEP 2 -->
       <div class="card section-hidden" id="section-lists">
         <div class="step-header">
           <div class="step-num" id="num-2">2</div>
@@ -142,7 +134,6 @@
         <div class="msg" id="msg-lists"></div>
       </div>
 
-      <!-- STEP 3 -->
       <div class="card section-hidden" id="section-courses">
         <div class="step-header">
           <div class="step-num" id="num-3">3</div>
@@ -152,7 +143,6 @@
         <div id="courses-list"><span class="empty">Carregando...</span></div>
       </div>
 
-      <!-- STEP 4 -->
       <div class="card section-hidden" id="section-members">
         <div class="step-header">
           <div class="step-num" id="num-4">4</div>
@@ -162,7 +152,6 @@
         <div id="members-list"><span class="empty">Carregando...</span></div>
       </div>
 
-      <!-- STEP 5 -->
       <div class="card section-hidden" id="section-action">
         <div class="step-header">
           <div class="step-num" id="num-5">5</div>
@@ -182,7 +171,6 @@
 
     </div>
 
-    <!-- ══ ABA: DASHBOARD ══ -->
     <div id="tab-dashboard" class="section-hidden">
       <div class="card">
         <div class="dash-header-row">
@@ -250,7 +238,6 @@ window.autoConnectPatched = async function() {
   }
 };
 
-// override showApp para atualizar avatar e chamar versão patched
 const _backShowApp = window.showApp;
 window.showApp = function() {
   _backShowApp();
