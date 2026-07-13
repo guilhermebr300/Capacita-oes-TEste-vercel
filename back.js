@@ -1,43 +1,46 @@
-// Proxy da Vercel — a API Key fica segura no servidor
 const BASE = '/api/proxy';
-
 let allCourses = [], allStatuses = [], memberListId = null;
 let workspaceMembers = [];
 let statusUserMap = {};
+let currentUserEmail = '';
 
-// ── API KEY salva no navegador ────────────────────────────
-// (usada apenas para identificar o usuário logado se necessário)
-// A key real fica na Vercel — o campo abaixo pode ficar vazio
-function getKey() { return document.getElementById('apiKey').value.trim(); }
-
-function saveKey() {
-  const key = getKey();
-  if (key) {
-    localStorage.setItem('clickup_api_key', key);
-    const badge = document.getElementById('key-saved-badge');
-    if (badge) badge.style.display = 'inline-flex';
-  }
-}
-
-function loadSavedKey() {
-  const saved = localStorage.getItem('clickup_api_key');
+// ── EMAIL salvo no navegador ──────────────────────────────
+function loadSavedEmail() {
+  const saved = localStorage.getItem('estat_email');
   if (saved) {
-    const input = document.getElementById('apiKey');
-    if (input) input.value = saved;
-    const badge = document.getElementById('key-saved-badge');
-    if (badge) badge.style.display = 'inline-flex';
+    currentUserEmail = saved;
+    return saved;
   }
+  return null;
 }
 
-function clearKey() {
+function saveEmail(email) {
+  currentUserEmail = email;
+  localStorage.setItem('estat_email', email);
+}
+
+function logout() {
+  localStorage.removeItem('estat_email');
+  localStorage.removeItem('clickup_api_key');
+  location.reload();
+}
+
+// ── API KEY opcional (fallback) ───────────────────────────
+function getManualKey() {
+  return localStorage.getItem('clickup_api_key') || '';
+}
+
+function saveManualKey() {
+  const key = document.getElementById('apiKey')?.value.trim();
+  if (key) localStorage.setItem('clickup_api_key', key);
+  return key;
+}
+
+function clearManualKey() {
   localStorage.removeItem('clickup_api_key');
   const input = document.getElementById('apiKey');
   if (input) input.value = '';
-  const badge = document.getElementById('key-saved-badge');
-  if (badge) badge.style.display = 'none';
 }
-
-window.addEventListener('DOMContentLoaded', loadSavedKey);
 
 // ── HELPERS ───────────────────────────────────────────────
 function showMsg(id, text, type) {
@@ -51,83 +54,157 @@ function hideMsg(id) {
   if (el) el.className = 'msg';
 }
 
-// GET
+// monta headers com email + key manual se tiver
+function buildHeaders(extra) {
+  const h = { 'Content-Type': 'application/json', 'X-User-Email': currentUserEmail };
+  const manualKey = getManualKey();
+  if (manualKey) h['X-Manual-Key'] = manualKey;
+  return { ...h, ...extra };
+}
+
 async function apiFetch(path) {
-  const r = await fetch(BASE + path);
+  const r = await fetch(BASE + path, { headers: buildHeaders() });
   if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.err || e.error || 'HTTP ' + r.status); }
   return r.json();
 }
 
-// POST
 async function apiPost(path, body) {
   const r = await fetch(BASE + path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildHeaders(),
     body: JSON.stringify(body)
   });
   if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.err || e.error || 'HTTP ' + r.status); }
   return r.json();
 }
 
-// ── CONECTAR ──────────────────────────────────────────────
-async function loadWorkspace() {
+// ── LOGIN ─────────────────────────────────────────────────
+async function handleLogin() {
+  const emailInput = document.getElementById('login-email');
+  const email = emailInput.value.trim().toLowerCase();
+  const errEl = document.getElementById('login-error');
+
+  if (!email) { errEl.textContent = 'Digite seu email.'; errEl.style.display = 'block'; return; }
+  if (!email.endsWith('@estatjr.com.br')) {
+    errEl.textContent = 'Acesso restrito a emails @estatjr.com.br.';
+    errEl.style.display = 'block'; return;
+  }
+
+  errEl.style.display = 'none';
+  const btn = document.getElementById('btn-login');
+  btn.textContent = 'Entrando...';
+  btn.disabled = true;
+
+  // valida no proxy
+  try {
+    currentUserEmail = email;
+    const r = await fetch(`${BASE}/auth-check`, { headers: buildHeaders() });
+    const data = await r.json();
+    if (!r.ok) {
+      errEl.textContent = data.error || 'Erro ao validar email.';
+      errEl.style.display = 'block';
+      btn.textContent = 'Entrar';
+      btn.disabled = false;
+      return;
+    }
+    saveEmail(email);
+    showApp();
+    autoConnect();
+  } catch(e) {
+    errEl.textContent = 'Erro de conexão: ' + e.message;
+    errEl.style.display = 'block';
+    btn.textContent = 'Entrar';
+    btn.disabled = false;
+  }
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'block';
+  document.getElementById('user-email-display').textContent = currentUserEmail;
+}
+
+function showLogin() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app-screen').style.display = 'none';
+}
+
+// ── AUTO CONNECT ──────────────────────────────────────────
+async function autoConnect() {
+  showMsg('msg-connect', 'Conectando automaticamente...', 'info');
+  // esconde o painel de fallback
+  document.getElementById('fallback-panel').style.display = 'none';
+
+  try {
+    await loadWorkspace();
+  } catch(e) {
+    // se falhar, mostra painel de fallback para colar key manual
+    showMsg('msg-connect', 'Falha na conexão automática. Cole sua API Key abaixo.', 'warn');
+    document.getElementById('fallback-panel').style.display = 'block';
+  }
+}
+
+async function connectWithManualKey() {
+  const key = saveManualKey();
+  if (!key) { showMsg('msg-connect', 'Cole sua API Key primeiro.', 'warn'); return; }
   showMsg('msg-connect', 'Conectando...', 'info');
+  document.getElementById('fallback-panel').style.display = 'none';
+  try {
+    await loadWorkspace();
+  } catch(e) {
+    showMsg('msg-connect', 'Erro: ' + e.message, 'error');
+    document.getElementById('fallback-panel').style.display = 'block';
+  }
+}
+
+// ── WORKSPACE ─────────────────────────────────────────────
+async function loadWorkspace() {
   ['section-lists','section-courses','section-members','section-action']
     .forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('section-hidden'); });
 
+  const teams = await apiFetch('/team');
+  if (!teams.teams?.length) throw new Error('Nenhum workspace encontrado.');
+  const teamId = teams.teams[0].id;
+
   try {
-    const teams = await apiFetch('/team');
-    if (!teams.teams?.length) { showMsg('msg-connect', 'Nenhum workspace encontrado.', 'error'); return; }
-    const teamId = teams.teams[0].id;
+    const teamData = await apiFetch(`/team/${teamId}`);
+    workspaceMembers = (teamData.team?.members || []).map(m => ({
+      id: String(m.user.id),
+      name: m.user.username || m.user.email,
+      email: m.user.email,
+    }));
+  } catch(e) { workspaceMembers = []; }
 
-    // membros do workspace
-    try {
-      const teamData = await apiFetch(`/team/${teamId}`);
-      workspaceMembers = (teamData.team?.members || []).map(m => ({
-        id: String(m.user.id),
-        name: m.user.username || m.user.email,
-        email: m.user.email,
-      }));
-    } catch(e) {
-      workspaceMembers = [];
-      console.warn('Usuários não carregados:', e.message);
+  const spaces = await apiFetch(`/team/${teamId}/space?archived=false`);
+  let allLists = [];
+  for (const sp of spaces.spaces) {
+    const fd = await apiFetch(`/space/${sp.id}/folder?archived=false`);
+    for (const fo of fd.folders) {
+      const ld = await apiFetch(`/folder/${fo.id}/list?archived=false`);
+      for (const l of ld.lists) allLists.push({ id: l.id, label: `${sp.name} / ${fo.name} / ${l.name}`, raw: l.name });
     }
+    const rd = await apiFetch(`/space/${sp.id}/list?archived=false`);
+    for (const l of rd.lists) allLists.push({ id: l.id, label: `${sp.name} / ${l.name}`, raw: l.name });
+  }
+  if (!allLists.length) throw new Error('Nenhuma lista encontrada.');
 
-    // todas as listas
-    const spaces = await apiFetch(`/team/${teamId}/space?archived=false`);
-    let allLists = [];
-    for (const sp of spaces.spaces) {
-      const fd = await apiFetch(`/space/${sp.id}/folder?archived=false`);
-      for (const fo of fd.folders) {
-        const ld = await apiFetch(`/folder/${fo.id}/list?archived=false`);
-        for (const l of ld.lists) allLists.push({ id: l.id, label: `${sp.name} / ${fo.name} / ${l.name}`, raw: l.name });
-      }
-      const rd = await apiFetch(`/space/${sp.id}/list?archived=false`);
-      for (const l of rd.lists) allLists.push({ id: l.id, label: `${sp.name} / ${l.name}`, raw: l.name });
-    }
-    if (!allLists.length) { showMsg('msg-connect', 'Nenhuma lista encontrada.', 'error'); return; }
+  const selC = document.getElementById('sel-courses');
+  const selM = document.getElementById('sel-members');
+  selC.innerHTML = '<option value="">— selecione a lista de cursos —</option>';
+  selM.innerHTML = '<option value="">— selecione a lista de membros —</option>';
+  for (const l of allLists) {
+    const n = l.raw.toLowerCase();
+    selC.appendChild(Object.assign(new Option(l.label, l.id), { selected: n.includes('curso') || n.includes('capacit') }));
+    selM.appendChild(Object.assign(new Option(l.label, l.id), { selected: n === 'membros' || n.includes('membro') }));
+  }
 
-    const selC = document.getElementById('sel-courses');
-    const selM = document.getElementById('sel-members');
-    selC.innerHTML = '<option value="">— selecione a lista de cursos —</option>';
-    selM.innerHTML = '<option value="">— selecione a lista de membros —</option>';
-    for (const l of allLists) {
-      const n = l.raw.toLowerCase();
-      selC.appendChild(Object.assign(new Option(l.label, l.id), { selected: n.includes('curso') || n.includes('capacit') }));
-      selM.appendChild(Object.assign(new Option(l.label, l.id), { selected: n === 'membros' || n.includes('membro') }));
-    }
+  const saved = localStorage.getItem('statusUserMap');
+  statusUserMap = saved ? JSON.parse(saved) : {};
 
-    // carrega mapa de vínculos salvo
-    const saved = localStorage.getItem('statusUserMap');
-    statusUserMap = saved ? JSON.parse(saved) : {};
-
-    document.getElementById('section-lists').classList.remove('section-hidden');
-    document.getElementById('num-1').classList.add('done');
-    document.getElementById('num-1').textContent = '✓';
-    showMsg('msg-connect', '✓ Conectado com sucesso!', 'success');
-    if (selC.value) loadCourses();
-    if (selM.value) loadMemberStatuses();
-  } catch(e) { showMsg('msg-connect', 'Erro: ' + e.message, 'error'); }
+  document.getElementById('section-lists').classList.remove('section-hidden');
+  showMsg('msg-connect', '✓ Conectado!', 'success');
+  if (selC.value) loadCourses();
+  if (selM.value) loadMemberStatuses();
 }
 
 // ── CURSOS ────────────────────────────────────────────────
@@ -166,7 +243,7 @@ async function loadCourses() {
   } catch(e) { showMsg('msg-lists', 'Erro ao carregar cursos: ' + e.message, 'error'); }
 }
 
-// ── MEMBROS (STATUS + VÍNCULO DE USUÁRIO) ─────────────────
+// ── MEMBROS ───────────────────────────────────────────────
 async function loadMemberStatuses() {
   const listId = document.getElementById('sel-members').value;
   if (!listId) return;
@@ -175,18 +252,14 @@ async function loadMemberStatuses() {
   allStatuses = [];
   try {
     const data = await apiFetch(`/list/${listId}`);
-    allStatuses = (data.statuses || [])
-      .filter(s => s.type !== 'closed')
-      .map(s => ({ name: s.status, color: s.color || '#4BAED4' }));
+    allStatuses = (data.statuses || []).filter(s => s.type !== 'closed').map(s => ({ name: s.status, color: s.color || '#4BAED4' }));
     const el = document.getElementById('members-list');
     document.getElementById('section-members').classList.remove('section-hidden');
     if (!allStatuses.length) { el.innerHTML = '<span class="empty">Nenhum status encontrado.</span>'; return; }
     document.getElementById('count-members').textContent = allStatuses.length + ' membros';
-
     const userOptions = workspaceMembers.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
-
     let html = `<label class="select-all-row"><input type="checkbox" onchange="toggleAll('member',this.checked)"> Selecionar todos</label>
-    <div class="member-hint">💡 Vincule cada membro ao usuário do ClickUp — ele será atribuído automaticamente e receberá notificação</div>
+    <div class="member-hint">💡 Vincule cada membro ao usuário do ClickUp para atribuição automática</div>
     <div class="list-grid">`;
     for (const s of allStatuses) {
       const sid = s.name.replace(/[^a-zA-Z0-9]/g, '_');
@@ -201,8 +274,6 @@ async function loadMemberStatuses() {
     }
     html += '</div>';
     el.innerHTML = html;
-
-    // restaura vínculos salvos
     document.querySelectorAll('.user-select').forEach(sel => {
       if (statusUserMap[sel.dataset.status]) sel.value = statusUserMap[sel.dataset.status];
     });
@@ -215,7 +286,6 @@ function saveStatusUser(statusName, userId) {
   localStorage.setItem('statusUserMap', JSON.stringify(statusUserMap));
 }
 
-// ── CHECKS & SUMMARY ─────────────────────────────────────
 function onCheck(cb, wrapId) {
   const wrap = document.getElementById(wrapId);
   if (wrap) cb.checked ? wrap.classList.add('selected') : wrap.classList.remove('selected');
@@ -246,7 +316,6 @@ function updateSummary() {
   }
 }
 
-// ── COPIAR CURSOS ─────────────────────────────────────────
 async function copyCourses() {
   const selectedCourseIds = [...document.querySelectorAll('.chk-course:checked')].map(c => c.value);
   const selectedStatuses  = [...document.querySelectorAll('.chk-member:checked')].map(c => c.value);
@@ -269,9 +338,7 @@ async function copyCourses() {
         if (course.markdown_description) body.markdown_description = course.markdown_description;
         else if (course.description) body.description = course.description;
         if (assigneeId) body.assignees = [parseInt(assigneeId)];
-
         const created = await apiPost(`/list/${memberListId}/task`, body);
-
         for (const cl of course.checklists) {
           const newCl = await apiPost(`/task/${created.id}/checklist`, { name: cl.name || 'Checklist' });
           const clId = newCl.checklist?.id;
@@ -279,86 +346,76 @@ async function copyCourses() {
           for (const item of (cl.items || []))
             await apiPost(`/checklist/${clId}/checklist_item`, { name: item.name, resolved: false });
         }
-
-        const userLabel = assigneeId ? ` → atribuído a ${workspaceMembers.find(m => m.id == assigneeId)?.name || '?'}` : '';
+        const userLabel = assigneeId ? ` → ${workspaceMembers.find(m=>m.id==assigneeId)?.name||'?'}` : '';
         log.push({ ok: true, text: `✓ ${course.name} → ${statusName}${userLabel}` });
       } catch(e) {
         errors++;
         log.push({ ok: false, text: `✗ ${course.name} → ${statusName}: ${e.message}` });
       }
       done++;
-      document.getElementById('progress-fill').style.width = Math.round(done / total * 100) + '%';
+      document.getElementById('progress-fill').style.width = Math.round(done/total*100) + '%';
     }
   }
 
   document.getElementById('btn-copy').disabled = false;
   document.getElementById('progress-wrap').style.display = 'none';
-  document.getElementById('result-list').innerHTML = log.map(l => `<div class="result-item ${l.ok?'ok':'err'}">${l.text}</div>`).join('');
-  document.getElementById('num-5').classList.add('done');
-  document.getElementById('num-5').textContent = errors === 0 ? '✓' : '!';
+  document.getElementById('result-list').innerHTML = log.map(l=>`<div class="result-item ${l.ok?'ok':'err'}">${l.text}</div>`).join('');
   showMsg('msg-result',
-    errors === 0 ? `✓ ${done} tarefa(s) criada(s) e responsáveis notificados!` : `${done - errors} criadas, ${errors} com erro.`,
-    errors === 0 ? 'success' : 'warn'
+    errors===0 ? `✓ ${done} tarefa(s) criada(s) com sucesso!` : `${done-errors} criadas, ${errors} com erro.`,
+    errors===0 ? 'success' : 'warn'
   );
 }
 
-// ── DASHBOARD ─────────────────────────────────────────────
 async function loadDashboard() {
   if (!memberListId) {
     const listId = document.getElementById('sel-members')?.value;
-    if (!listId) { document.getElementById('dashboard-body').innerHTML = '<div class="dash-loading">Conecte ao ClickUp na aba anterior primeiro.</div>'; return; }
+    if (!listId) { document.getElementById('dashboard-body').innerHTML = '<div class="dash-loading">Conecte primeiro na aba Copiar cursos.</div>'; return; }
     memberListId = listId;
   }
-  document.getElementById('dashboard-body').innerHTML = '<div class="dash-loading">Carregando dados...</div>';
+  document.getElementById('dashboard-body').innerHTML = '<div class="dash-loading">Carregando...</div>';
   try {
     const data = await apiFetch(`/list/${memberListId}/task?archived=false&subtasks=true&page=0`);
     const tasks = data.tasks || [];
-
     const byStatus = {};
     for (const t of tasks) {
       const status = t.status?.status || 'sem status';
       if (!byStatus[status]) byStatus[status] = [];
       byStatus[status].push(t);
     }
-
-    const details = await Promise.all(tasks.map(t => apiFetch(`/task/${t.id}`).catch(() => null)));
+    const details = await Promise.all(tasks.map(t => apiFetch(`/task/${t.id}`).catch(()=>null)));
     const detailMap = {};
     for (const d of details) if (d) detailMap[d.id] = d;
 
     let html = '';
     const statusNames = Object.keys(byStatus).sort();
-    if (!statusNames.length) {
-      html = '<div class="empty">Nenhum dado encontrado.</div>';
-    } else {
+    if (!statusNames.length) { html = '<div class="empty">Nenhum dado encontrado.</div>'; }
+    else {
       for (const status of statusNames) {
         const memberTasks = byStatus[status];
         const userId = statusUserMap[status];
-        const user = workspaceMembers.find(m => m.id == userId);
+        const user = workspaceMembers.find(m=>m.id==userId);
         html += `<div class="dash-member">
           <div class="dash-member-header">
             <span class="status-dot" style="background:${allStatuses.find(s=>s.name===status)?.color||'#4BAED4'}"></span>
             <strong>${status}</strong>
-            ${user ? `<span class="dash-user-badge">${user.name}</span>` : ''}
+            ${user?`<span class="dash-user-badge">${user.name}</span>`:''}
             <span class="dash-count">${memberTasks.length} curso(s)</span>
           </div>`;
-        if (!memberTasks.length) {
-          html += `<div class="dash-empty-member">Nenhum curso atribuído.</div>`;
-        } else {
+        if (!memberTasks.length) { html += `<div class="dash-empty-member">Nenhum curso atribuído.</div>`; }
+        else {
           html += `<div class="dash-courses">`;
           for (const task of memberTasks) {
             const d = detailMap[task.id];
-            const checklists = d?.checklists || [];
-            const totalItems = checklists.reduce((a, cl) => a + (cl.items?.length || 0), 0);
-            const doneItems  = checklists.reduce((a, cl) => a + (cl.items?.filter(i=>i.resolved).length || 0), 0);
-            const pct = totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : 0;
-            const isClosed = task.status?.type === 'closed';
+            const checklists = d?.checklists||[];
+            const totalItems = checklists.reduce((a,cl)=>a+(cl.items?.length||0),0);
+            const doneItems  = checklists.reduce((a,cl)=>a+(cl.items?.filter(i=>i.resolved).length||0),0);
+            const pct = totalItems>0?Math.round((doneItems/totalItems)*100):0;
+            const isClosed = task.status?.type==='closed';
             html += `<div class="dash-course-row">
               <div class="dash-course-name ${isClosed?'done-text':''}">${isClosed?'✓ ':''}${task.name}</div>
               <div class="dash-progress-wrap">
-                <div class="dash-progress-bar">
-                  <div class="dash-progress-fill" style="width:${pct}%;background:${pct===100?'var(--success)':'var(--blue)'}"></div>
-                </div>
-                <span class="dash-pct">${doneItems}/${totalItems} itens · ${pct}%</span>
+                <div class="dash-progress-bar"><div class="dash-progress-fill" style="width:${pct}%;background:${pct===100?'var(--success)':'var(--blue)'}"></div></div>
+                <span class="dash-pct">${doneItems}/${totalItems} · ${pct}%</span>
               </div>
             </div>`;
           }
@@ -372,3 +429,14 @@ async function loadDashboard() {
     document.getElementById('dashboard-body').innerHTML = `<div class="msg show error">Erro: ${e.message}</div>`;
   }
 }
+
+// ── INIT ──────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  const savedEmail = loadSavedEmail();
+  if (savedEmail) {
+    showApp();
+    autoConnect();
+  } else {
+    showLogin();
+  }
+});
