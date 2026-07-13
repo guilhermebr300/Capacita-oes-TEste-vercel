@@ -371,7 +371,7 @@ async function loadDashboard() {
     if (!listId) { document.getElementById('dashboard-body').innerHTML = '<div class="dash-loading">Conecte primeiro na aba Copiar cursos.</div>'; return; }
     memberListId = listId;
   }
-  document.getElementById('dashboard-body').innerHTML = '<div class="dash-loading">Carregando...</div>';
+  document.getElementById('dashboard-body').innerHTML = '<div class="dash-loading">⏳ Carregando progresso...</div>';
   try {
     const data = await apiFetch(`/list/${memberListId}/task?archived=false&subtasks=true&page=0`);
     const tasks = data.tasks || [];
@@ -385,51 +385,103 @@ async function loadDashboard() {
     const detailMap = {};
     for (const d of details) if (d) detailMap[d.id] = d;
 
-    let html = '';
     const statusNames = Object.keys(byStatus).sort();
-    if (!statusNames.length) { html = '<div class="empty">Nenhum dado encontrado.</div>'; }
-    else {
-      for (const status of statusNames) {
-        const memberTasks = byStatus[status];
-        const userId = statusUserMap[status];
-        const user = workspaceMembers.find(m=>m.id==userId);
-        html += `<div class="dash-member">
-          <div class="dash-member-header">
-            <span class="status-dot" style="background:${allStatuses.find(s=>s.name===status)?.color||'#4BAED4'}"></span>
-            <strong>${status}</strong>
-            ${user?`<span class="dash-user-badge">${user.name}</span>`:''}
-            <span class="dash-count">${memberTasks.length} curso(s)</span>
-          </div>`;
-        if (!memberTasks.length) { html += `<div class="dash-empty-member">Nenhum curso atribuído.</div>`; }
-        else {
-          html += `<div class="dash-courses">`;
-          for (const task of memberTasks) {
-            const d = detailMap[task.id];
-            const checklists = d?.checklists||[];
-            const totalItems = checklists.reduce((a,cl)=>a+(cl.items?.length||0),0);
-            const doneItems  = checklists.reduce((a,cl)=>a+(cl.items?.filter(i=>i.resolved).length||0),0);
-            const pct = totalItems>0?Math.round((doneItems/totalItems)*100):0;
-            const isClosed = task.status?.type==='closed';
-            html += `<div class="dash-course-row">
-              <div class="dash-course-name ${isClosed?'done-text':''}">${isClosed?'✓ ':''}${task.name}</div>
-              <div class="dash-progress-wrap">
-                <div class="dash-progress-bar"><div class="dash-progress-fill" style="width:${pct}%;background:${pct===100?'var(--success)':'var(--blue)'}"></div></div>
-                <span class="dash-pct">${doneItems}/${totalItems} · ${pct}%</span>
-              </div>
-            </div>`;
-          }
-          html += `</div>`;
-        }
-        html += `</div>`;
-      }
+    if (!statusNames.length) {
+      document.getElementById('dashboard-body').innerHTML = '<div class="empty">Nenhum dado encontrado.</div>';
+      return;
     }
-    document.getElementById('dashboard-body').innerHTML = html;
+
+    // calcula progresso geral de cada membro para o card de resumo
+    let summaryHtml = '<div class="dash-summary-grid">';
+    for (const status of statusNames) {
+      const memberTasks = byStatus[status];
+      const userId = statusUserMap[status];
+      const user = workspaceMembers.find(m=>m.id==userId);
+      const dotColor = allStatuses.find(s=>s.name===status)?.color || '#5BB8F5';
+      let totalAll = 0, doneAll = 0;
+      for (const task of memberTasks) {
+        const d = detailMap[task.id];
+        const cls = d?.checklists || [];
+        totalAll += cls.reduce((a,cl) => a+(cl.items?.length||0), 0);
+        doneAll  += cls.reduce((a,cl) => a+(cl.items?.filter(i=>i.resolved).length||0), 0);
+      }
+      const pctAll = totalAll > 0 ? Math.round((doneAll/totalAll)*100) : 0;
+      const ring = pctAll === 100 ? '#1E9E5A' : pctAll > 50 ? '#5BB8F5' : pctAll > 0 ? '#F0A020' : '#CCE8F7';
+      summaryHtml += `
+        <div class="dash-member-card">
+          <div class="dash-ring-wrap">
+            <svg width="72" height="72" viewBox="0 0 72 72">
+              <circle cx="36" cy="36" r="30" fill="none" stroke="#E0EEF8" stroke-width="7"/>
+              <circle cx="36" cy="36" r="30" fill="none" stroke="${ring}" stroke-width="7"
+                stroke-dasharray="${Math.round(2*Math.PI*30)}"
+                stroke-dashoffset="${Math.round(2*Math.PI*30 * (1 - pctAll/100))}"
+                stroke-linecap="round"
+                transform="rotate(-90 36 36)"/>
+            </svg>
+            <span class="dash-ring-pct" style="color:${ring}">${pctAll}%</span>
+          </div>
+          <div class="dash-card-info">
+            <div class="dash-card-name">
+              <span class="status-dot" style="background:${dotColor}"></span>
+              ${status}
+            </div>
+            ${user ? `<div class="dash-card-user">${user.name}</div>` : ''}
+            <div class="dash-card-meta">${memberTasks.length} curso(s) · ${doneAll}/${totalAll} itens</div>
+          </div>
+        </div>`;
+    }
+    summaryHtml += '</div>';
+
+    // detalhe por membro
+    let detailHtml = '';
+    for (const status of statusNames) {
+      const memberTasks = byStatus[status];
+      const userId = statusUserMap[status];
+      const user = workspaceMembers.find(m=>m.id==userId);
+      const dotColor = allStatuses.find(s=>s.name===status)?.color || '#5BB8F5';
+      detailHtml += `<div class="dash-member">
+        <div class="dash-member-header">
+          <span class="status-dot" style="background:${dotColor}"></span>
+          <strong>${status}</strong>
+          ${user ? `<span class="dash-user-badge">${user.name}</span>` : ''}
+          <span class="dash-count">${memberTasks.length} curso(s)</span>
+        </div>`;
+      if (!memberTasks.length) {
+        detailHtml += `<div class="dash-empty-member">Nenhum curso atribuído ainda.</div>`;
+      } else {
+        detailHtml += `<div class="dash-courses">`;
+        for (const task of memberTasks) {
+          const d = detailMap[task.id];
+          const cls = d?.checklists || [];
+          const totalItems = cls.reduce((a,cl) => a+(cl.items?.length||0), 0);
+          const doneItems  = cls.reduce((a,cl) => a+(cl.items?.filter(i=>i.resolved).length||0), 0);
+          const pct = totalItems > 0 ? Math.round((doneItems/totalItems)*100) : 0;
+          const isClosed = task.status?.type === 'closed';
+          const barColor = pct===100 ? '#1E9E5A' : pct>50 ? '#5BB8F5' : pct>0 ? '#F0A020' : '#CCE8F7';
+          detailHtml += `<div class="dash-course-row">
+            <div class="dash-course-top">
+              <span class="dash-course-name ${isClosed?'done-text':''}">${isClosed?'✓ ':''}${task.name}</span>
+              <span class="dash-course-pct-badge" style="background:${barColor}20;color:${barColor};border-color:${barColor}40">${pct}%</span>
+            </div>
+            <div class="dash-progress-wrap">
+              <div class="dash-progress-bar">
+                <div class="dash-progress-fill" style="width:${pct}%;background:${barColor}"></div>
+              </div>
+              <span class="dash-pct">${doneItems}/${totalItems} itens</span>
+            </div>
+          </div>`;
+        }
+        detailHtml += `</div>`;
+      }
+      detailHtml += `</div>`;
+    }
+
+    document.getElementById('dashboard-body').innerHTML = summaryHtml + '<div style="margin-top:1.5rem">' + detailHtml + '</div>';
   } catch(e) {
     document.getElementById('dashboard-body').innerHTML = `<div class="msg show error">Erro: ${e.message}</div>`;
   }
 }
 
-// ── INIT ──────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   const savedEmail = loadSavedEmail();
   if (savedEmail) {
