@@ -109,7 +109,6 @@ async function handleLogin() {
     }
     saveEmail(email);
     showApp();
-    autoConnect();
   } catch(e) {
     errEl.textContent = 'Erro de conexão: ' + e.message;
     errEl.style.display = 'block';
@@ -435,7 +434,6 @@ window.addEventListener('DOMContentLoaded', () => {
   const savedEmail = loadSavedEmail();
   if (savedEmail) {
     showApp();
-    autoConnect();
   } else {
     showLogin();
   }
