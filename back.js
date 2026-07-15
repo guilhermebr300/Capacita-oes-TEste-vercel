@@ -157,9 +157,9 @@ async function connectWithManualKey() {
 }
 
 // ── WORKSPACE ─────────────────────────────────────────────
-// Listas de áreas de cursos (ex: Projetos, IM...) e lista de Membros
-let courseAreaLists = []; // [{id, name}] — cada lista = uma área
+let courseAreaLists = []; // [{id, name}] — cada lista = uma área de cursos
 let memberListFound = null;
+let trilhaSpaceName = '';
 
 async function loadWorkspace() {
   ['section-lists','section-courses','section-members','section-action']
@@ -179,55 +179,56 @@ async function loadWorkspace() {
     }));
   } catch(e) { workspaceMembers = []; }
 
-  // varre spaces procurando o folder "Trilha de Capacitações"
+  // procura o ESPAÇO "Trilha de Capacitações"
   const spaces = await apiFetch(`/team/${teamId}/space?archived=false`);
-  let trilhaFolder = null;
-
-  outer: for (const sp of spaces.spaces) {
-    const fd = await apiFetch(`/space/${sp.id}/folder?archived=false`);
-    for (const fo of fd.folders) {
-      if (fo.name.toLowerCase().includes('trilha') || fo.name.toLowerCase().includes('capacita')) {
-        trilhaFolder = fo;
-        break outer;
-      }
+  let trilhaSpace = null;
+  for (const sp of spaces.spaces) {
+    if (sp.name.toLowerCase().includes('trilha') || sp.name.toLowerCase().includes('capacita')) {
+      trilhaSpace = sp;
+      break;
     }
   }
-
-  if (!trilhaFolder) throw new Error('Folder "Trilha de Capacitações" não encontrado. Verifique o nome no ClickUp.');
-
-  // listas dentro do folder — cada uma é uma área (Cursos, Membros, etc.)
-  const listsData = await apiFetch(`/folder/${trilhaFolder.id}/list?archived=false`);
-  const lists = listsData.lists || [];
+  if (!trilhaSpace) throw new Error('Espaço "Trilha de Capacitações" não encontrado. Verifique o nome no ClickUp.');
+  trilhaSpaceName = trilhaSpace.name;
 
   courseAreaLists = [];
   memberListFound = null;
 
-  for (const l of lists) {
+  // listas direto no espaço (sem folder) — ex: Membros, Por área, Por soluções
+  const rootListsData = await apiFetch(`/space/${trilhaSpace.id}/list?archived=false`);
+  for (const l of (rootListsData.lists || [])) {
     const n = l.name.toLowerCase();
-    if (n.includes('membro')) {
-      memberListFound = l;
-    } else {
-      // tudo que não é Membros = área de cursos
-      courseAreaLists.push({ id: l.id, name: l.name });
+    if (n.includes('membro')) memberListFound = l;
+    else courseAreaLists.push({ id: l.id, name: l.name });
+  }
+
+  // listas dentro de folders do espaço (caso existam subfolders)
+  const foldersData = await apiFetch(`/space/${trilhaSpace.id}/folder?archived=false`);
+  for (const fo of (foldersData.folders || [])) {
+    const flData = await apiFetch(`/folder/${fo.id}/list?archived=false`);
+    for (const l of (flData.lists || [])) {
+      const n = l.name.toLowerCase();
+      if (n.includes('membro')) memberListFound = l;
+      else courseAreaLists.push({ id: l.id, name: l.name });
     }
   }
 
-  if (!courseAreaLists.length) throw new Error('Nenhuma lista de cursos encontrada dentro do folder.');
-  if (!memberListFound) throw new Error('Lista de Membros não encontrada dentro do folder.');
+  if (!memberListFound) throw new Error('Lista "Membros" não encontrada no espaço da Trilha.');
+  if (!courseAreaLists.length) throw new Error('Nenhuma lista de cursos encontrada no espaço da Trilha.');
 
   memberListId = memberListFound.id;
 
   const saved = localStorage.getItem('statusUserMap');
   statusUserMap = saved ? JSON.parse(saved) : {};
 
-  // mostra info do folder no step 2
+  // info no step 2
   const folderInfoEl = document.getElementById('folder-info');
   if (folderInfoEl) {
     folderInfoEl.innerHTML = `
-      <span style="display:inline-flex;align-items:center;gap:8px;background:var(--sky-light);padding:8px 14px;border-radius:var(--radius);border:1px solid var(--border);">
-        📁 <strong>${trilhaFolder.name}</strong>
+      <span style="display:inline-flex;align-items:center;gap:8px;background:var(--sky-light);padding:8px 14px;border-radius:var(--radius);border:1px solid var(--border);flex-wrap:wrap;">
+        🚀 <strong>${trilhaSpace.name}</strong>
         <span style="color:var(--muted)">·</span>
-        <span style="color:var(--muted)">${courseAreaLists.length} área(s) de cursos</span>
+        <span style="color:var(--muted)">${courseAreaLists.length} lista(s) de cursos</span>
         <span style="color:var(--muted)">·</span>
         <span style="color:var(--muted)">Membros: <strong style="color:var(--text-sec)">${memberListFound.name}</strong></span>
       </span>`;
@@ -235,9 +236,8 @@ async function loadWorkspace() {
   document.getElementById('section-lists').classList.remove('section-hidden');
   document.getElementById('num-2').classList.add('done');
   document.getElementById('num-2').textContent = '✓';
-  showMsg('msg-connect', `✓ Conectado! Folder encontrado com ${courseAreaLists.length} área(s).`, 'success');
+  showMsg('msg-connect', `✓ Conectado ao espaço "${trilhaSpace.name}"!`, 'success');
 
-  // carrega cursos por área e membros automaticamente
   await loadCoursesByArea();
   await loadMemberStatuses();
 }
