@@ -3,7 +3,7 @@ let allCourses = [], memberListId = null;
 let workspaceMembers = [];
 let currentUserEmail = '';
 
-// ── Email
+// ── EMAIL salvo no navegador ──────────────────────────────
 function loadSavedEmail() {
   const saved = localStorage.getItem('estat_email');
   if (saved) {
@@ -24,7 +24,7 @@ function logout() {
   location.reload();
 }
 
-// ── Api
+// ── API KEY opcional (fallback) ───────────────────────────
 function getManualKey() {
   return localStorage.getItem('clickup_api_key') || '';
 }
@@ -41,6 +41,7 @@ function clearManualKey() {
   if (input) input.value = '';
 }
 
+// ── HELPERS ───────────────────────────────────────────────
 function showMsg(id, text, type) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -60,23 +61,122 @@ function buildHeaders(extra) {
   return { ...h, ...extra };
 }
 
-async function apiFetch(path) {
-  const r = await fetch(BASE + path, { headers: buildHeaders() });
+// ── FILA DE CONCORRÊNCIA + RETRY (protege contra Rate Limit do ClickUp) ──
+// O ClickUp limita ~100 req/min por token. Sem isso, qualquer Promise.all
+// no código (ex: buscar detalhes de N tasks em paralelo) dispara tudo de
+// uma vez e estoura 429 assim que o volume de dados cresce.
+const MAX_CONCURRENT = 4;   // requisições simultâneas permitidas ao ClickUp
+const RETRY_LIMIT = 5;      // tentativas em caso de 429 antes de desistir
+let activeRequests = 0;
+const requestQueue = [];
+
+function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+function scheduleRequest(fn) {
+  return new Promise((resolve, reject) => {
+    requestQueue.push({ fn, resolve, reject });
+    pumpQueue();
+  });
+}
+
+function pumpQueue() {
+  if (activeRequests >= MAX_CONCURRENT || !requestQueue.length) return;
+  const { fn, resolve, reject } = requestQueue.shift();
+  activeRequests++;
+  fn().then(resolve, reject).finally(() => {
+    activeRequests--;
+    pumpQueue();
+  });
+}
+
+async function withRetry(fn) {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (e.isRateLimit && attempt < RETRY_LIMIT) {
+        attempt++;
+        // backoff crescente, respeitando o Retry-After do ClickUp quando existe
+        await sleep(Math.min(e.retryAfter * 1000 * attempt, 30000));
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
+async function rawRequest(path, opts) {
+  const r = await fetch(BASE + path, opts);
+  if (r.status === 429) {
+    const err = new Error('Limite de requisições do ClickUp atingido, tentando novamente...');
+    err.isRateLimit = true;
+    err.retryAfter = parseFloat(r.headers.get('Retry-After')) || 1;
+    throw err;
+  }
   if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.err || e.error || 'HTTP ' + r.status); }
   return r.json();
+}
+
+async function apiFetch(path) {
+  return scheduleRequest(() => withRetry(() => rawRequest(path, { headers: buildHeaders() })));
 }
 
 async function apiPost(path, body) {
-  const r = await fetch(BASE + path, {
+  return scheduleRequest(() => withRetry(() => rawRequest(path, {
     method: 'POST',
     headers: buildHeaders(),
     body: JSON.stringify(body)
-  });
-  if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.err || e.error || 'HTTP ' + r.status); }
-  return r.json();
+  })));
 }
 
-//  Login
+// ── PAGINAÇÃO COMPLETA ────────────────────────────────────
+// A API do ClickUp devolve no máx. 100 tasks por página. Chamar só
+// page=0 (como antes) perde tasks silenciosamente quando a lista cresce.
+// `pathPrefix` deve terminar em '?' ou '&' — a função completa com page=N.
+async function apiFetchAllPages(pathPrefix) {
+  let page = 0, all = [], lastPage = false;
+  while (!lastPage) {
+    const data = await apiFetch(`${pathPrefix}page=${page}`);
+    const tasks = data.tasks || [];
+    all = all.concat(tasks);
+    lastPage = data.last_page === true || tasks.length === 0;
+    page++;
+    if (page > 50) break; // trava de segurança contra loop infinito
+  }
+  return all;
+}
+
+// ── CACHE DE DETALHES DE TASK (checklists) ────────────────
+// loadCoursesByArea, loadDashboard e o "Atualizar" do dashboard buscam o
+// detalhe (checklists) de CADA task toda vez que rodam. Isso é o maior
+// consumidor de requisições do app: N tasks = N chamadas GET /task/:id
+// repetidas mesmo quando nada mudou desde a última vez.
+// Solução: cache em memória (dura enquanto a página está aberta, some
+// no F5 — não usamos localStorage aqui pra não guardar dado de curso
+// desatualizado entre sessões) chaveado por task.id, guardando também o
+// `date_updated` que o próprio ClickUp devolve na listagem. Se o
+// date_updated não mudou, a task não foi editada no ClickUp desde a
+// última busca — então reaproveitamos o detalhe já salvo em vez de
+// gastar mais uma chamada de API.
+const taskDetailCache = {}; // { [taskId]: { date_updated, data } }
+
+async function getTaskDetailCached(task) {
+  const cached = taskDetailCache[task.id];
+  if (cached && cached.date_updated === task.date_updated) {
+    return cached.data; // nada mudou no ClickUp desde a última vez — usa o cache
+  }
+  try {
+    const data = await apiFetch(`/task/${task.id}`);
+    taskDetailCache[task.id] = { date_updated: task.date_updated, data };
+    return data;
+  } catch (e) {
+    // se a busca falhar, devolve o cache antigo (se existir) em vez de quebrar a tela
+    return cached ? cached.data : task;
+  }
+}
+
+// ── LOGIN ─────────────────────────────────────────────────
 async function handleLogin() {
   const emailInput = document.getElementById('login-email');
   const email = emailInput.value.trim().toLowerCase();
@@ -126,7 +226,7 @@ function showLogin() {
   document.getElementById('app-screen').style.display = 'none';
 }
 
-// Conexao automatica
+// ── AUTO CONNECT ──────────────────────────────────────────
 async function autoConnect() {
   showMsg('msg-connect', 'Conectando automaticamente...', 'info');
   // esconde o painel de fallback
@@ -154,7 +254,7 @@ async function connectWithManualKey() {
   }
 }
 
-// identifica o espaço 
+// ── WORKSPACE ─────────────────────────────────────────────
 let courseAreaLists = []; // [{id, name}] — cada lista = uma área de cursos
 let memberListFound = null;
 let trilhaSpaceName = '';
@@ -261,7 +361,7 @@ async function resolveCreationStatus() {
   } catch(e) { creationStatusName = null; }
 }
 
-//  CURSOS POR ÁREA (agrupados pela 1ª etiqueta de cada curso) 
+// ── CURSOS POR ÁREA (agrupados pela 1ª etiqueta de cada curso) ──
 async function loadCoursesByArea() {
   document.getElementById('section-courses').classList.add('section-hidden');
   allCourses = [];
@@ -270,15 +370,15 @@ async function loadCoursesByArea() {
     // busca tarefas de todas as listas de curso em paralelo (Por área, Por soluções, etc.)
     const listResults = await Promise.all(
       courseAreaLists.map(async lst => {
-        const data = await apiFetch(`/list/${lst.id}/task?archived=false&page=0`);
-        const tasks = data.tasks || [];
-        // busca detalhes (checklists) em paralelo
-        const details = await Promise.all(tasks.map(t => apiFetch(`/task/${t.id}`).catch(() => t)));
+        const tasks = await apiFetchAllPages(`/list/${lst.id}/task?archived=false&`);
+        // busca detalhes (checklists) com cache — só rebusca no ClickUp
+        // as tasks cujo date_updated mudou desde a última vez
+        const details = await Promise.all(tasks.map(t => getTaskDetailCached(t)));
         return details;
       })
     );
 
-    // monta allCourses e agrupa por etiqueta (área)  usa a 1ª etiqueta do curso;
+    // monta allCourses e agrupa por etiqueta (área) — usa a 1ª etiqueta do curso;
     // sem etiqueta cai em "Sem área"
     const groups = {}; // { areaLabel: [course, ...] }
     let totalCursos = 0;
@@ -339,7 +439,7 @@ async function loadCoursesByArea() {
   } catch(e) { showMsg('msg-lists', 'Erro ao carregar cursos: ' + e.message, 'error'); }
 }
 
-
+// ── MEMBROS ───────────────────────────────────────────────
 // Membro = pessoa do workspace (assignee), não um status do ClickUp.
 async function loadMembers() {
   document.getElementById('section-members').classList.add('section-hidden');
@@ -449,7 +549,7 @@ async function copyCourses() {
   );
 }
 
-// Dashobord (agrupado por Responsável)
+// ── DASHBOARD (agrupado por Responsável/assignee) ─────────
 async function loadDashboard() {
   if (!memberListId) {
     document.getElementById('dashboard-body').innerHTML = '<div class="dash-loading">Conecte primeiro na aba Copiar cursos.</div>';
@@ -457,10 +557,9 @@ async function loadDashboard() {
   }
   document.getElementById('dashboard-body').innerHTML = '<div class="dash-loading">⏳ Carregando progresso...</div>';
   try {
-    const data = await apiFetch(`/list/${memberListId}/task?archived=false&subtasks=true&include_closed=true&page=0`);
-    const tasks = data.tasks || [];
+    const tasks = await apiFetchAllPages(`/list/${memberListId}/task?archived=false&subtasks=true&include_closed=true&`);
 
-    // agrupa por responsável 
+    // agrupa por responsável (assignee)
     const byMember = {}; // key -> { name, tasks: [] }
     for (const t of tasks) {
       const assignees = (t.assignees && t.assignees.length) ? t.assignees : [{ id: '_sem', username: 'Sem responsável' }];
@@ -471,7 +570,9 @@ async function loadDashboard() {
       }
     }
 
-    const details = await Promise.all(tasks.map(t => apiFetch(`/task/${t.id}`).catch(()=>null)));
+    // detalhes (checklists) com cache — mesma lógica de getTaskDetailCached:
+    // só rebusca no ClickUp as tasks cujo date_updated mudou
+    const details = await Promise.all(tasks.map(t => getTaskDetailCached(t).catch(()=>null)));
     const detailMap = {};
     for (const d of details) if (d) detailMap[d.id] = d;
 
@@ -569,7 +670,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-//Rank
+// ── RANKING DE MELHORES CURSOS ────────────────────────────
 async function loadRanking() {
   if (!memberListId) {
     document.getElementById('ranking-body').innerHTML =
@@ -582,10 +683,9 @@ async function loadRanking() {
 
   try {
     // busca todas as tarefas da lista de membros com campos customizados
-    const data = await apiFetch(
-      `/list/${memberListId}/task?archived=false&include_closed=true&custom_fields=true&page=0`
+    const tasks = await apiFetchAllPages(
+      `/list/${memberListId}/task?archived=false&include_closed=true&custom_fields=true&`
     );
-    const tasks = data.tasks || [];
 
     // agrupa por nome do curso e coleta notas
     const courseMap = {}; // { nomeCurso: { notas: [], totalConcluidos: 0, total: 0 } }
