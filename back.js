@@ -651,7 +651,7 @@ async function loadDashboard() {
       const pctAll = totalAll > 0 ? Math.round((doneAll/totalAll)*100) : 0;
       const ring = pctAll === 100 ? '#1E9E5A' : pctAll > 50 ? '#5BB8F5' : pctAll > 0 ? '#F0A020' : '#CCE8F7';
       summaryHtml += `
-        <div class="dash-member-card">
+        <div class="dash-member-card" data-member-key="${key}" onclick="filterDashboardMember('${key}')" title="Clique para ver só ${name}">
           <div class="dash-ring-wrap">
             <svg width="72" height="72" viewBox="0 0 72 72">
               <circle cx="36" cy="36" r="30" fill="none" stroke="#E0EEF8" stroke-width="7"/>
@@ -675,7 +675,7 @@ async function loadDashboard() {
     let detailHtml = '';
     for (const key of memberKeys) {
       const { name, tasks: memberTasks } = byMember[key];
-      detailHtml += `<div class="dash-member">
+      detailHtml += `<div class="dash-member" data-member-key="${key}">
         <div class="dash-member-header">
           <strong>${name}</strong>
           <span class="dash-count">${memberTasks.length} curso(s)</span>
@@ -711,9 +711,43 @@ async function loadDashboard() {
     }
 
     document.getElementById('dashboard-body').innerHTML = summaryHtml + '<div style="margin-top:1.5rem">' + detailHtml + '</div>';
+    // se já tinha alguém filtrado (ex: deu "Atualizar" olhando o progresso
+    // de uma pessoa), reaplica o filtro no novo HTML em vez de perder o estado
+    applyDashboardFilter();
   } catch(e) {
     document.getElementById('dashboard-body').innerHTML = `<div class="msg show error">Erro: ${e.message}</div>`;
   }
+}
+
+// ── FILTRO "SÓ ESSA PESSOA" NO DASHBOARD ──────────────────
+// Com a empresa crescendo (~30 membros), a lista de progresso fica
+// poluída. Clicar num card de resumo esconde todo o resto (outros cards
+// + outros blocos de detalhe) e deixa só a pessoa clicada visível.
+// Clicar de novo no mesmo card, ou no botão "Mostrar todos", desfaz.
+let dashboardFilterKey = null;
+
+function filterDashboardMember(key) {
+  dashboardFilterKey = (dashboardFilterKey === key) ? null : key; // clique de novo = desfaz
+  applyDashboardFilter();
+}
+
+function clearDashboardFilter() {
+  dashboardFilterKey = null;
+  applyDashboardFilter();
+}
+
+function applyDashboardFilter() {
+  const clearBtn = document.getElementById('dash-clear-filter');
+  if (clearBtn) clearBtn.style.display = dashboardFilterKey ? '' : 'none';
+
+  document.querySelectorAll('.dash-member-card').forEach(card => {
+    const isMatch = card.dataset.memberKey === dashboardFilterKey;
+    card.style.display = (!dashboardFilterKey || isMatch) ? '' : 'none';
+    card.classList.toggle('dash-card-active', isMatch);
+  });
+  document.querySelectorAll('.dash-member').forEach(det => {
+    det.style.display = (!dashboardFilterKey || det.dataset.memberKey === dashboardFilterKey) ? '' : 'none';
+  });
 }
 
 window.addEventListener('DOMContentLoaded', () => {
