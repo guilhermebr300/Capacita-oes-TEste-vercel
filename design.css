@@ -659,6 +659,7 @@ footer span { color: var(--sky-dark); font-weight: 600; }
   margin-bottom: 1.25rem;
 }
 .area-group:last-child { margin-bottom: 0; }
+.area-group .check-item { border-left: 4px solid var(--area-color, var(--border)); }
 
 .area-label {
   font-size: 11px;
