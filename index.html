@@ -81,7 +81,6 @@
     </div>
   </section>
 
-  <!-- TABS -->
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showTab('copiar')"> Copiar cursos</button>
     <button class="nav-tab" onclick="showTab('dashboard')">📊 Acompanhamento</button>
@@ -90,17 +89,14 @@
 
   <main class="main">
 
-    <!-- ══ ABA: COPIAR ══ -->
     <div id="tab-copiar">
 
-      <!-- CONEXÃO -->
       <div class="card">
         <div class="step-header" style="margin-bottom:8px">
           <div class="step-num" id="num-1">1</div>
           <div class="step-title">Conexão com ClickUp</div>
         </div>
 
-        <!-- status visual -->
         <div class="conn-status">
           <div class="conn-dot loading" id="conn-dot"></div>
           <span id="conn-text">Conectando...</span>
@@ -108,7 +104,7 @@
 
         <div class="msg" id="msg-connect"></div>
 
-        <!-- Painel colapsável de API Key manual -->
+        <!-- se der merda para conectar a api -->
         <div id="fallback-wrap" style="margin-top:12px; display:none;">
           <div class="fallback-toggle" onclick="toggleFallback()">
             <span class="fallback-toggle-label">⚠ Problema na conexão — clique para inserir API Key</span>
