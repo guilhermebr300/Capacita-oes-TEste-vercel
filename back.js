@@ -351,6 +351,56 @@ function normalizeStatus(s) {
     .trim();
 }
 
+// ── ÁREA/SOLUÇÃO DO CURSO (Tag do ClickUp OU Custom Field) ────────────
+// A lista "Por área" agrupa os cursos usando Tags nativas do ClickUp
+// (course.tags). Já a lista "Por soluções" agrupa usando um Custom Field
+// (o "Grupo: Soluções" que aparece no topo da lista no ClickUp) — por
+// isso essa segunda lista não tinha nenhuma área detectada antes.
+// resolveCustomFieldLabel() decodifica o valor de um Custom Field pro
+// texto legível, já que o ClickUp guarda isso de formas diferentes
+// dependendo do tipo do campo:
+//   - drop_down: value é o índice (orderindex) da opção escolhida
+//   - labels:    value é um array de ids das opções escolhidas
+//   - outros:    value já costuma vir como texto simples
+function resolveCustomFieldLabel(field) {
+  if (field.value === null || field.value === undefined || field.value === '') return null;
+  const opts = field.type_config?.options || [];
+
+  if (field.type === 'drop_down') {
+    const opt = opts.find(o => o.orderindex === field.value) || opts[field.value];
+    return opt ? (opt.name || opt.label || null) : null;
+  }
+  if (field.type === 'labels') {
+    const ids = Array.isArray(field.value) ? field.value : [field.value];
+    const opt = opts.find(o => ids.includes(o.id));
+    return opt ? (opt.label || opt.name || null) : null;
+  }
+  // texto simples, número, etc. — usa o valor bruto se for utilizável
+  if (typeof field.value === 'string' && field.value.trim()) return field.value.trim();
+  return null;
+}
+
+function getAreaLabel(course) {
+  // 1) Tag nativa do ClickUp (usado pela lista "Por área")
+  if (course.tags && course.tags.length) return course.tags[0].name;
+
+  // 2) Custom Field cujo nome sugere área/solução/grupo (usado pela
+  //    lista "Por soluções") — procura por nome em vez de pegar o
+  //    primeiro campo com valor, pra não confundir com outros campos
+  //    como "Avaliação do curso"
+  const fields = course.custom_fields || [];
+  const groupField = fields.find(f => {
+    const n = normalizeStatus(f.name);
+    return n.includes('area') || n.includes('solu') || n.includes('grupo');
+  });
+  if (groupField) {
+    const label = resolveCustomFieldLabel(groupField);
+    if (label) return label;
+  }
+
+  return 'Sem área';
+}
+
 async function resolveCreationStatus() {
   creationStatusName = null;
   try {
@@ -378,8 +428,10 @@ async function loadCoursesByArea() {
       })
     );
 
-    // monta allCourses e agrupa por etiqueta (área) — usa a 1ª etiqueta do curso;
-    // sem etiqueta cai em "Sem área"
+    // monta allCourses e agrupa por área/solução — usa a 1ª etiqueta (Tag)
+    // do curso; se não tiver Tag, tenta um Custom Field do tipo "Grupo/
+    // Área/Solução" (é assim que a lista "Por soluções" agrupa no ClickUp,
+    // por isso ela não caía no caso das Tags); sem nenhum dos dois, "Sem área"
     const groups = {}; // { areaLabel: [course, ...] }
     let totalCursos = 0;
 
@@ -387,6 +439,7 @@ async function loadCoursesByArea() {
       for (const d of tasks) {
         const course = {
           id: d.id, name: d.name, tags: d.tags || [],
+          custom_fields: d.custom_fields || [],
           description: d.description || '',
           markdown_description: d.markdown_description || '',
           checklists: d.checklists || []
@@ -394,7 +447,7 @@ async function loadCoursesByArea() {
         allCourses.push(course);
         totalCursos++;
 
-        const areaLabel = course.tags.length ? course.tags[0].name : 'Sem área';
+        const areaLabel = getAreaLabel(course);
         if (!groups[areaLabel]) groups[areaLabel] = [];
         groups[areaLabel].push(course);
       }
