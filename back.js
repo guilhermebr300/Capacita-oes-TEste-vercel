@@ -1,7 +1,7 @@
 const BASE = '/api/proxy';
-let allCourses = [], allStatuses = [], memberListId = null;
+let allCourses = [], memberListId = null;
+const NEW_TASK_STATUS = 'Em progresso'; // status forçado ao criar/duplicar cursos
 let workspaceMembers = [];
-let statusUserMap = {};
 let currentUserEmail = '';
 
 // ── EMAIL salvo no navegador ──────────────────────────────
@@ -218,9 +218,6 @@ async function loadWorkspace() {
 
   memberListId = memberListFound.id;
 
-  const saved = localStorage.getItem('statusUserMap');
-  statusUserMap = saved ? JSON.parse(saved) : {};
-
   // info no step 2
   const folderInfoEl = document.getElementById('folder-info');
   if (folderInfoEl) {
@@ -239,7 +236,7 @@ async function loadWorkspace() {
   showMsg('msg-connect', `✓ Conectado ao espaço "${trilhaSpace.name}"!`, 'success');
 
   await loadCoursesByArea();
-  await loadMemberStatuses();
+  await loadMembers();
 }
 
 // ── CURSOS POR ÁREA ───────────────────────────────────────
@@ -301,44 +298,32 @@ async function loadCoursesByArea() {
 }
 
 // ── MEMBROS ───────────────────────────────────────────────
-async function loadMemberStatuses() {
-  if (!memberListId) return;
+// Membro = pessoa do workspace (assignee), não um status do ClickUp.
+async function loadMembers() {
   document.getElementById('section-members').classList.add('section-hidden');
-  allStatuses = [];
   try {
-    const data = await apiFetch(`/list/${memberListId}`);
-    allStatuses = (data.statuses || []).filter(s => s.type !== 'closed').map(s => ({ name: s.status, color: s.color || '#4BAED4' }));
     const el = document.getElementById('members-list');
     document.getElementById('section-members').classList.remove('section-hidden');
-    if (!allStatuses.length) { el.innerHTML = '<span class="empty">Nenhum status encontrado.</span>'; return; }
-    document.getElementById('count-members').textContent = allStatuses.length + ' membros';
-    const userOptions = workspaceMembers.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+
+    if (!workspaceMembers.length) {
+      el.innerHTML = '<span class="empty">Nenhum membro encontrado no workspace.</span>';
+      return;
+    }
+    document.getElementById('count-members').textContent = workspaceMembers.length + ' membros';
+
     let html = `<label class="select-all-row"><input type="checkbox" onchange="toggleAll('member',this.checked)"> Selecionar todos</label>
-    <div class="member-hint">💡 Vincule cada membro ao usuário do ClickUp para atribuição automática</div>
     <div class="list-grid">`;
-    for (const s of allStatuses) {
-      const sid = s.name.replace(/[^a-zA-Z0-9]/g, '_');
-      html += `<div class="check-item" id="ci-m-${sid}">
-        <input type="checkbox" class="chk-member" value="${s.name}" onchange="onCheck(this,'ci-m-${sid}')">
-        <span class="status-dot" style="background:${s.color}"></span>
-        <label onclick="this.previousElementSibling.previousElementSibling.click()" style="min-width:120px">${s.name}</label>
-        <select class="user-select" data-status="${s.name}" onchange="saveStatusUser('${s.name}',this.value)">
-          <option value="">— sem vínculo —</option>${userOptions}
-        </select>
+    for (const m of workspaceMembers) {
+      const safeId = m.id.replace(/[^a-zA-Z0-9]/g, '_');
+      html += `<div class="check-item" id="ci-m-${safeId}">
+        <input type="checkbox" class="chk-member" value="${m.id}" onchange="onCheck(this,'ci-m-${safeId}')">
+        <label onclick="this.previousElementSibling.click()">${m.name}${m.email ? ` <span style="color:var(--muted);font-weight:400">(${m.email})</span>` : ''}</label>
       </div>`;
     }
     html += '</div>';
     el.innerHTML = html;
-    document.querySelectorAll('.user-select').forEach(sel => {
-      if (statusUserMap[sel.dataset.status]) sel.value = statusUserMap[sel.dataset.status];
-    });
     updateSummary();
   } catch(e) { showMsg('msg-lists', 'Erro ao carregar membros: ' + e.message, 'error'); }
-}
-
-function saveStatusUser(statusName, userId) {
-  statusUserMap[statusName] = userId;
-  localStorage.setItem('statusUserMap', JSON.stringify(statusUserMap));
 }
 
 function onCheck(cb, wrapId) {
@@ -362,10 +347,8 @@ function updateSummary() {
   const sect = document.getElementById('section-action');
   if (nc > 0 && nm > 0) {
     sect.classList.remove('section-hidden');
-    const withUser = [...document.querySelectorAll('.chk-member:checked')].filter(cb => statusUserMap[cb.value]).length;
     document.getElementById('summary').innerHTML =
-      `Serão criadas <strong>${nc * nm}</strong> tarefa(s): <strong>${nc}</strong> curso(s) × <strong>${nm}</strong> membro(s).<br>
-       <span style="font-size:12px;color:var(--muted)">✓ ${withUser} de ${nm} membros com responsável vinculado.</span>`;
+      `Serão criadas <strong>${nc * nm}</strong> tarefa(s): <strong>${nc}</strong> curso(s) × <strong>${nm}</strong> membro(s), atribuídas diretamente como responsável no ClickUp, com status inicial "<strong>${NEW_TASK_STATUS}</strong>".`;
   } else {
     sect.classList.add('section-hidden');
   }
@@ -373,9 +356,9 @@ function updateSummary() {
 
 async function copyCourses() {
   const selectedCourseIds = [...document.querySelectorAll('.chk-course:checked')].map(c => c.value);
-  const selectedStatuses  = [...document.querySelectorAll('.chk-member:checked')].map(c => c.value);
+  const selectedMemberIds = [...document.querySelectorAll('.chk-member:checked')].map(c => c.value);
   const courses = allCourses.filter(c => selectedCourseIds.includes(c.id));
-  const total = courses.length * selectedStatuses.length;
+  const total = courses.length * selectedMemberIds.length;
   let done = 0, errors = 0;
   const log = [];
 
@@ -384,15 +367,15 @@ async function copyCourses() {
   document.getElementById('result-list').innerHTML = '';
   hideMsg('msg-result');
 
-  for (const statusName of selectedStatuses) {
-    const assigneeId = statusUserMap[statusName] || null;
+  for (const memberId of selectedMemberIds) {
+    const member = workspaceMembers.find(m => m.id === memberId);
+    const memberLabel = member ? member.name : memberId;
     for (const course of courses) {
-      document.getElementById('progress-label').textContent = `Copiando "${course.name}" → "${statusName}"...`;
+      document.getElementById('progress-label').textContent = `Copiando "${course.name}" → "${memberLabel}"...`;
       try {
-        const body = { name: course.name, status: statusName };
+        const body = { name: course.name, assignees: [parseInt(memberId)], status: NEW_TASK_STATUS };
         if (course.markdown_description) body.markdown_description = course.markdown_description;
         else if (course.description) body.description = course.description;
-        if (assigneeId) body.assignees = [parseInt(assigneeId)];
         const created = await apiPost(`/list/${memberListId}/task`, body);
         for (const cl of course.checklists) {
           const newCl = await apiPost(`/task/${created.id}/checklist`, { name: cl.name || 'Checklist' });
@@ -401,11 +384,10 @@ async function copyCourses() {
           for (const item of (cl.items || []))
             await apiPost(`/checklist/${clId}/checklist_item`, { name: item.name, resolved: false });
         }
-        const userLabel = assigneeId ? ` → ${workspaceMembers.find(m=>m.id==assigneeId)?.name||'?'}` : '';
-        log.push({ ok: true, text: `✓ ${course.name} → ${statusName}${userLabel}` });
+        log.push({ ok: true, text: `✓ ${course.name} → ${memberLabel}` });
       } catch(e) {
         errors++;
-        log.push({ ok: false, text: `✗ ${course.name} → ${statusName}: ${e.message}` });
+        log.push({ ok: false, text: `✗ ${course.name} → ${memberLabel}: ${e.message}` });
       }
       done++;
       document.getElementById('progress-fill').style.width = Math.round(done/total*100) + '%';
@@ -421,39 +403,42 @@ async function copyCourses() {
   );
 }
 
+// ── DASHBOARD (agrupado por Responsável/assignee) ─────────
 async function loadDashboard() {
   if (!memberListId) {
-    const listId = document.getElementById('sel-members')?.value;
-    if (!listId) { document.getElementById('dashboard-body').innerHTML = '<div class="dash-loading">Conecte primeiro na aba Copiar cursos.</div>'; return; }
-    memberListId = listId;
+    document.getElementById('dashboard-body').innerHTML = '<div class="dash-loading">Conecte primeiro na aba Copiar cursos.</div>';
+    return;
   }
   document.getElementById('dashboard-body').innerHTML = '<div class="dash-loading">⏳ Carregando progresso...</div>';
   try {
-    const data = await apiFetch(`/list/${memberListId}/task?archived=false&subtasks=true&page=0`);
+    const data = await apiFetch(`/list/${memberListId}/task?archived=false&subtasks=true&include_closed=true&page=0`);
     const tasks = data.tasks || [];
-    const byStatus = {};
+
+    // agrupa por responsável (assignee)
+    const byMember = {}; // key -> { name, tasks: [] }
     for (const t of tasks) {
-      const status = t.status?.status || 'sem status';
-      if (!byStatus[status]) byStatus[status] = [];
-      byStatus[status].push(t);
+      const assignees = (t.assignees && t.assignees.length) ? t.assignees : [{ id: '_sem', username: 'Sem responsável' }];
+      for (const a of assignees) {
+        const key = String(a.id);
+        if (!byMember[key]) byMember[key] = { name: a.username || a.email || 'Sem responsável', tasks: [] };
+        byMember[key].tasks.push(t);
+      }
     }
+
     const details = await Promise.all(tasks.map(t => apiFetch(`/task/${t.id}`).catch(()=>null)));
     const detailMap = {};
     for (const d of details) if (d) detailMap[d.id] = d;
 
-    const statusNames = Object.keys(byStatus).sort();
-    if (!statusNames.length) {
+    const memberKeys = Object.keys(byMember).sort((a,b) => byMember[a].name.localeCompare(byMember[b].name));
+    if (!memberKeys.length) {
       document.getElementById('dashboard-body').innerHTML = '<div class="empty">Nenhum dado encontrado.</div>';
       return;
     }
 
     // calcula progresso geral de cada membro para o card de resumo
     let summaryHtml = '<div class="dash-summary-grid">';
-    for (const status of statusNames) {
-      const memberTasks = byStatus[status];
-      const userId = statusUserMap[status];
-      const user = workspaceMembers.find(m=>m.id==userId);
-      const dotColor = allStatuses.find(s=>s.name===status)?.color || '#5BB8F5';
+    for (const key of memberKeys) {
+      const { name, tasks: memberTasks } = byMember[key];
       let totalAll = 0, doneAll = 0;
       for (const task of memberTasks) {
         const d = detailMap[task.id];
@@ -477,11 +462,7 @@ async function loadDashboard() {
             <span class="dash-ring-pct" style="color:${ring}">${pctAll}%</span>
           </div>
           <div class="dash-card-info">
-            <div class="dash-card-name">
-              <span class="status-dot" style="background:${dotColor}"></span>
-              ${status}
-            </div>
-            ${user ? `<div class="dash-card-user">${user.name}</div>` : ''}
+            <div class="dash-card-name">${name}</div>
             <div class="dash-card-meta">${memberTasks.length} curso(s) · ${doneAll}/${totalAll} itens</div>
           </div>
         </div>`;
@@ -490,16 +471,11 @@ async function loadDashboard() {
 
     // detalhe por membro
     let detailHtml = '';
-    for (const status of statusNames) {
-      const memberTasks = byStatus[status];
-      const userId = statusUserMap[status];
-      const user = workspaceMembers.find(m=>m.id==userId);
-      const dotColor = allStatuses.find(s=>s.name===status)?.color || '#5BB8F5';
+    for (const key of memberKeys) {
+      const { name, tasks: memberTasks } = byMember[key];
       detailHtml += `<div class="dash-member">
         <div class="dash-member-header">
-          <span class="status-dot" style="background:${dotColor}"></span>
-          <strong>${status}</strong>
-          ${user ? `<span class="dash-user-badge">${user.name}</span>` : ''}
+          <strong>${name}</strong>
           <span class="dash-count">${memberTasks.length} curso(s)</span>
         </div>`;
       if (!memberTasks.length) {
@@ -550,13 +526,9 @@ window.addEventListener('DOMContentLoaded', () => {
 // ── RANKING DE MELHORES CURSOS ────────────────────────────
 async function loadRanking() {
   if (!memberListId) {
-    const listId = document.getElementById('sel-members')?.value;
-    if (!listId) {
-      document.getElementById('ranking-body').innerHTML =
-        '<div class="dash-loading">Conecte primeiro na aba Copiar cursos.</div>';
-      return;
-    }
-    memberListId = listId;
+    document.getElementById('ranking-body').innerHTML =
+      '<div class="dash-loading">Conecte primeiro na aba Copiar cursos.</div>';
+    return;
   }
 
   document.getElementById('ranking-body').innerHTML =
