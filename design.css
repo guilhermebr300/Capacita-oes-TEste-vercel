@@ -445,12 +445,18 @@ footer span { color: var(--sky-dark); font-weight: 600; }
   align-items: center;
   gap: 14px;
   box-shadow: var(--shadow-sm);
+  cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
 }
 .dash-member-card:hover {
   border-color: var(--sky);
   box-shadow: var(--shadow-md);
   transform: translateY(-2px);
+}
+/* card da pessoa atualmente filtrada no dashboard (clique pra focar em só 1 membro) */
+.dash-member-card.dash-card-active {
+  border-color: var(--sky);
+  box-shadow: 0 0 0 3px var(--sky-glow), var(--shadow-md);
 }
 
 .dash-ring-wrap {
