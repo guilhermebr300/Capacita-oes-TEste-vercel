@@ -3,7 +3,7 @@ let allCourses = [], memberListId = null;
 let workspaceMembers = [];
 let currentUserEmail = '';
 
-// ── EMAIL salvo no navegador ──────────────────────────────
+// ── Email
 function loadSavedEmail() {
   const saved = localStorage.getItem('estat_email');
   if (saved) {
@@ -24,7 +24,7 @@ function logout() {
   location.reload();
 }
 
-// ── API KEY opcional (fallback) ───────────────────────────
+// ── Api
 function getManualKey() {
   return localStorage.getItem('clickup_api_key') || '';
 }
@@ -41,7 +41,6 @@ function clearManualKey() {
   if (input) input.value = '';
 }
 
-// ── HELPERS ───────────────────────────────────────────────
 function showMsg(id, text, type) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -77,7 +76,7 @@ async function apiPost(path, body) {
   return r.json();
 }
 
-// ── LOGIN ─────────────────────────────────────────────────
+//  Login
 async function handleLogin() {
   const emailInput = document.getElementById('login-email');
   const email = emailInput.value.trim().toLowerCase();
@@ -127,7 +126,7 @@ function showLogin() {
   document.getElementById('app-screen').style.display = 'none';
 }
 
-// ── AUTO CONNECT ──────────────────────────────────────────
+// Conexao automatica
 async function autoConnect() {
   showMsg('msg-connect', 'Conectando automaticamente...', 'info');
   // esconde o painel de fallback
@@ -155,7 +154,7 @@ async function connectWithManualKey() {
   }
 }
 
-// ── WORKSPACE ─────────────────────────────────────────────
+// identifica o espaço 
 let courseAreaLists = []; // [{id, name}] — cada lista = uma área de cursos
 let memberListFound = null;
 let trilhaSpaceName = '';
@@ -262,7 +261,7 @@ async function resolveCreationStatus() {
   } catch(e) { creationStatusName = null; }
 }
 
-// ── CURSOS POR ÁREA (agrupados pela 1ª etiqueta de cada curso) ──
+//  CURSOS POR ÁREA (agrupados pela 1ª etiqueta de cada curso) 
 async function loadCoursesByArea() {
   document.getElementById('section-courses').classList.add('section-hidden');
   allCourses = [];
@@ -279,7 +278,7 @@ async function loadCoursesByArea() {
       })
     );
 
-    // monta allCourses e agrupa por etiqueta (área) — usa a 1ª etiqueta do curso;
+    // monta allCourses e agrupa por etiqueta (área)  usa a 1ª etiqueta do curso;
     // sem etiqueta cai em "Sem área"
     const groups = {}; // { areaLabel: [course, ...] }
     let totalCursos = 0;
@@ -340,7 +339,7 @@ async function loadCoursesByArea() {
   } catch(e) { showMsg('msg-lists', 'Erro ao carregar cursos: ' + e.message, 'error'); }
 }
 
-// ── MEMBROS ───────────────────────────────────────────────
+
 // Membro = pessoa do workspace (assignee), não um status do ClickUp.
 async function loadMembers() {
   document.getElementById('section-members').classList.add('section-hidden');
@@ -450,7 +449,7 @@ async function copyCourses() {
   );
 }
 
-// ── DASHBOARD (agrupado por Responsável/assignee) ─────────
+// Dashobord (agrupado por Responsável)
 async function loadDashboard() {
   if (!memberListId) {
     document.getElementById('dashboard-body').innerHTML = '<div class="dash-loading">Conecte primeiro na aba Copiar cursos.</div>';
@@ -461,7 +460,7 @@ async function loadDashboard() {
     const data = await apiFetch(`/list/${memberListId}/task?archived=false&subtasks=true&include_closed=true&page=0`);
     const tasks = data.tasks || [];
 
-    // agrupa por responsável (assignee)
+    // agrupa por responsável 
     const byMember = {}; // key -> { name, tasks: [] }
     for (const t of tasks) {
       const assignees = (t.assignees && t.assignees.length) ? t.assignees : [{ id: '_sem', username: 'Sem responsável' }];
@@ -570,7 +569,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// ── RANKING DE MELHORES CURSOS ────────────────────────────
+//Rank
 async function loadRanking() {
   if (!memberListId) {
     document.getElementById('ranking-body').innerHTML =
