@@ -351,11 +351,13 @@ function normalizeStatus(s) {
     .trim();
 }
 
-// ── ÁREA/SOLUÇÃO DO CURSO (Tag do ClickUp OU Custom Field) ────────────
-// A lista "Por área" agrupa os cursos usando Tags nativas do ClickUp
-// (course.tags). Já a lista "Por soluções" agrupa usando um Custom Field
-// (o "Grupo: Soluções" que aparece no topo da lista no ClickUp) — por
-// isso essa segunda lista não tinha nenhuma área detectada antes.
+// ── ÁREA/SOLUÇÃO DO CURSO (via Custom Field do ClickUp) ────────────
+// Tanto "Por área" quanto "Por soluções" agrupam os cursos usando o
+// mesmo mecanismo no ClickUp: um Custom Field (o "Grupo: ..." que
+// aparece no topo da lista) — não Tags. As Tags continuam existindo nos
+// cursos, mas com vários valores não-exclusivos por curso, então usá-las
+// pra agrupar misturava tudo; por isso não são mais usadas para isso
+// (continuam aparecendo como badge informativo ao lado do nome do curso).
 // resolveCustomFieldLabel() decodifica o valor de um Custom Field pro
 // texto legível, já que o ClickUp guarda isso de formas diferentes
 // dependendo do tipo do campo:
@@ -381,13 +383,13 @@ function resolveCustomFieldLabel(field) {
 }
 
 function getAreaLabel(course) {
-  // 1) Tag nativa do ClickUp (usado pela lista "Por área")
-  if (course.tags && course.tags.length) return course.tags[0].name;
-
-  // 2) Custom Field cujo nome sugere área/solução/grupo (usado pela
-  //    lista "Por soluções") — procura por nome em vez de pegar o
-  //    primeiro campo com valor, pra não confundir com outros campos
-  //    como "Avaliação do curso"
+  // Agrupamento único via Custom Field (nome contendo "área"/"solução"/
+  // "grupo"). A lógica antiga usava a 1ª Tag do curso, mas as Tags do
+  // ClickUp aqui têm vários valores não-exclusivos por curso (ex: um
+  // curso marcado com "im", "vendas" E "marketing" ao mesmo tempo) —
+  // usar só a primeira misturava os cursos em áreas erradas. O Custom
+  // Field é a fonte confiável porque é o mesmo campo que o ClickUp usa
+  // pra agrupar ("Grupo: ...") em ambas as listas, "Por área" e "Por soluções".
   const fields = course.custom_fields || [];
   const groupField = fields.find(f => {
     const n = normalizeStatus(f.name);
