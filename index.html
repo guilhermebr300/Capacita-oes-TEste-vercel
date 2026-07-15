@@ -17,7 +17,7 @@
 <div id="login-screen">
   <div class="login-box">
     <div class="login-logo">
-      <img src="marca.svg" alt="Estat Júnior" height="48">
+      <img src="marca.png" alt="Estat Júnior" height="48">
       <div class="login-logo-text">
         <span class="login-logo-name">Estat Júnior</span>
         <span class="login-logo-sub">Trilha de Capacitações</span>
@@ -42,6 +42,7 @@
 
     <button class="login-btn" id="btn-login" onclick="handleLogin()">Entrar →</button>
 
+    <p class="login-domain-hint">Acesso restrito a <span>@estatjr.com.br</span></p>
   </div>
 </div>
 
@@ -50,7 +51,7 @@
   <!-- Headeer-->
   <header>
     <div class="logo">
-      <img src="marca.svg" alt="Estat Júnior" height="40" style="display:block; filter: brightness(0) invert(1);">
+      <img src="marca.png" alt="Estat Júnior" height="40" style="display:block; filter: brightness(0) invert(1);">
       <div class="logo-text">
         <span class="logo-name">Estat Júnior</span>
         <span class="logo-sub">Trilha de Capacitações</span>
@@ -179,6 +180,7 @@
             <div class="step-title">Progresso por membro</div>
           </div>
           <button class="btn btn-outline" onclick="loadDashboard()">↻ Atualizar</button>
+          <button class="btn btn-outline" id="dash-clear-filter" style="display:none;margin-left:8px" onclick="clearDashboardFilter()">✕ Mostrar todos</button>
         </div>
         <p style="font-size:13px;color:var(--muted);margin-bottom:1rem">
           Progresso em tempo real baseado nos checklists do ClickUp.
