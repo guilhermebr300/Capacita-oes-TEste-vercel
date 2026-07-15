@@ -66,40 +66,36 @@
     <div class="hero-text">
       <div class="hero-eyebrow">Ferramenta interna</div>
       <h1>Copiar cursos<br>para <span>membros</span></h1>
-<ul>
+<ol>
   <li>Primeiro escolha o membro</li>
-  <li>escolha os cursos que deseja fazer</li>
+  <li>Escolha os cursos</li>
   <li>Clique no botão de duplicar</li>
-    <li>OLhe no clickup se tudo ocorreu bem </li>
+  <li>Olhe no clickup se tudo ocorreu bem </li>
   💙
 
-</ul>      
+</ol>      
     </div>
     <div class="hero-tiger">
       <img src="estatigrao.png" alt="Tigrão" width="150" style="display:block;filter:drop-shadow(0 8px 24px rgba(58,156,200,0.18));">
     </div>
   </section>
 
-  <!-- TABS -->
   <div class="nav-tabs">
-    <button class="nav-tab active" onclick="showTab('copiar')">📋 Copiar cursos</button>
+    <button class="nav-tab active" onclick="showTab('copiar')"> Copiar cursos</button>
     <button class="nav-tab" onclick="showTab('dashboard')">📊 Acompanhamento</button>
     <button class="nav-tab" onclick="showTab('ranking')">🏆 Melhores cursos</button>
   </div>
 
   <main class="main">
 
-    <!-- ══ ABA: COPIAR ══ -->
     <div id="tab-copiar">
 
-      <!-- CONEXÃO -->
       <div class="card">
         <div class="step-header" style="margin-bottom:8px">
           <div class="step-num" id="num-1">1</div>
           <div class="step-title">Conexão com ClickUp</div>
         </div>
 
-        <!-- status visual -->
         <div class="conn-status">
           <div class="conn-dot loading" id="conn-dot"></div>
           <span id="conn-text">Conectando...</span>
@@ -107,7 +103,7 @@
 
         <div class="msg" id="msg-connect"></div>
 
-        <!-- Painel colapsável de API Key manual -->
+        <!--Se a conexão automatica der erro-->
         <div id="fallback-wrap" style="margin-top:12px; display:none;">
           <div class="fallback-toggle" onclick="toggleFallback()">
             <span class="fallback-toggle-label">⚠ Problema na conexão — clique para inserir API Key</span>
@@ -121,13 +117,12 @@
             </div>
             <p class="tip" style="margin-top:8px">
               Avatar → <strong>Configurações → Aplicativos</strong> → Token de API pessoal.<br>
-              <a href="https://app.clickup.com/settings/apps" target="_blank">Abrir configurações ↗</a>
+              <a href="https://app.clickup.com"</a>
             </p>
           </div>
         </div>
       </div>
 
-      <!-- STEP 2 -->
       <div class="card section-hidden" id="section-lists">
         <div class="step-header">
           <div class="step-num" id="num-2">2</div>
@@ -139,7 +134,6 @@
         <div class="msg" id="msg-lists"></div>
       </div>
 
-      <!-- STEP 3 -->
       <div class="card section-hidden" id="section-members">
         <div class="step-header">
           <div class="step-num" id="num-3">3</div>
@@ -149,7 +143,6 @@
         <div id="members-list"><span class="empty">Carregando...</span></div>
       </div>
 
-      <!-- STEP 4 -->
       <div class="card section-hidden" id="section-courses">
         <div class="step-header">
           <div class="step-num" id="num-4">4</div>
@@ -159,7 +152,6 @@
         <div id="courses-list"><span class="empty">Carregando...</span></div>
       </div>
 
-      <!-- STEP 5 -->
       <div class="card section-hidden" id="section-action">
         <div class="step-header">
           <div class="step-num" id="num-5">5</div>
@@ -178,8 +170,7 @@
       </div>
 
     </div>
-
-    <!-- ══ ABA: DASHBOARD ══ -->
+<!--Dashboard--->
     <div id="tab-dashboard" class="section-hidden">
       <div class="card">
         <div class="dash-header-row">
@@ -198,7 +189,7 @@
       </div>
     </div>
 
-    <!-- ══ ABA: RANKING ══ -->
+    <!--Rankeando cursos -->
     <div id="tab-ranking" class="section-hidden">
       <div class="card">
         <div class="dash-header-row">
@@ -219,13 +210,10 @@
 
   </main>
 
-  <footer>
-    Desenvolvido internamente pela <span>Estat Júnior</span> · UNICAMP
-  </footer>
-
 </div>
 
 <script src="back.js"></script>
+  
 <script>
 function showTab(tab) {
   document.getElementById('tab-copiar').classList.toggle('section-hidden', tab !== 'copiar');
@@ -255,7 +243,6 @@ function setConnStatus(state, text) {
   if (txt) txt.textContent = text;
 }
 
-// patch autoConnect para atualizar o status visual
 const _origAutoConnect = autoConnect;
 window.autoConnectPatched = async function() {
   setConnStatus('loading', 'Conectando automaticamente...');
@@ -278,7 +265,6 @@ window.autoConnectPatched = async function() {
   }
 };
 
-// override showApp para atualizar avatar e chamar versão patched
 const _backShowApp = window.showApp;
 window.showApp = function() {
   _backShowApp();
