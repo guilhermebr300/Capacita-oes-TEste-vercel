@@ -132,14 +132,14 @@ function showLogin() {
 async function autoConnect() {
   showMsg('msg-connect', 'Conectando automaticamente...', 'info');
   // esconde o painel de fallback
-  document.getElementById('fallback-panel').style.display = 'none';
+  document.getElementById('fallback-wrap').style.display = 'none';
 
   try {
     await loadWorkspace();
   } catch(e) {
     // se falhar, mostra painel de fallback para colar key manual
     showMsg('msg-connect', 'Falha na conexão automática. Cole sua API Key abaixo.', 'warn');
-    document.getElementById('fallback-panel').style.display = 'block';
+    document.getElementById('fallback-wrap').style.display = 'block';
   }
 }
 
@@ -147,12 +147,12 @@ async function connectWithManualKey() {
   const key = saveManualKey();
   if (!key) { showMsg('msg-connect', 'Cole sua API Key primeiro.', 'warn'); return; }
   showMsg('msg-connect', 'Conectando...', 'info');
-  document.getElementById('fallback-panel').style.display = 'none';
+  document.getElementById('fallback-wrap').style.display = 'none';
   try {
     await loadWorkspace();
   } catch(e) {
     showMsg('msg-connect', 'Erro: ' + e.message, 'error');
-    document.getElementById('fallback-panel').style.display = 'block';
+    document.getElementById('fallback-wrap').style.display = 'block';
   }
 }
 
@@ -306,7 +306,7 @@ async function loadMemberStatuses() {
   document.getElementById('section-members').classList.add('section-hidden');
   allStatuses = [];
   try {
-    const data = await apiFetch(`/list/${listId}`);
+    const data = await apiFetch(`/list/${memberListId}`);
     allStatuses = (data.statuses || []).filter(s => s.type !== 'closed').map(s => ({ name: s.status, color: s.color || '#4BAED4' }));
     const el = document.getElementById('members-list');
     document.getElementById('section-members').classList.remove('section-hidden');
