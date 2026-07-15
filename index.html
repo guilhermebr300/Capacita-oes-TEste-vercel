@@ -13,6 +13,7 @@
 </head>
 <body>
 
+<!-- ══ TELA DE LOGIN ══ -->
 <div id="login-screen">
   <div class="login-box">
     <div class="login-logo">
@@ -45,6 +46,7 @@
   </div>
 </div>
 
+<!-- ══ APP ══ -->
 <div id="app-screen">
 
   <!-- HEADER -->
@@ -65,36 +67,38 @@
     </div>
   </header>
 
+  <!-- HERO -->
   <section class="hero">
     <div class="hero-text">
       <div class="hero-eyebrow">Ferramenta interna</div>
       <h1>Copiar cursos<br>para <span>membros</span></h1>
-      <p>1°Escolha a lista de cursos.<br>
-         2°Escolha o curso ou os cursos<br>
-         3°Escolha os membros que vão fazer o curso<br>
-         4°Aperte em duplicar e olhe no clickup se tudo ocorreu bem 💙<br>
-      </p>
+      <p>Duplique qualquer curso — com descrição, link e checklist — direto para o status do membro, com atribuição e notificação automática.</p>
     </div>
     <div class="hero-tiger">
       <img src="estatigrao.png" alt="Tigrão" width="150" style="display:block;filter:drop-shadow(0 8px 24px rgba(58,156,200,0.18));">
     </div>
   </section>
 
+  <!-- TABS -->
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showTab('copiar')">📋 Copiar cursos</button>
     <button class="nav-tab" onclick="showTab('dashboard')">📊 Acompanhamento</button>
+    <button class="nav-tab" onclick="showTab('ranking')">🏆 Melhores cursos</button>
   </div>
 
   <main class="main">
 
+    <!-- ══ ABA: COPIAR ══ -->
     <div id="tab-copiar">
 
+      <!-- CONEXÃO -->
       <div class="card">
         <div class="step-header" style="margin-bottom:8px">
           <div class="step-num" id="num-1">1</div>
           <div class="step-title">Conexão com ClickUp</div>
         </div>
 
+        <!-- status visual -->
         <div class="conn-status">
           <div class="conn-dot loading" id="conn-dot"></div>
           <span id="conn-text">Conectando...</span>
@@ -122,18 +126,19 @@
         </div>
       </div>
 
+      <!-- STEP 2 -->
       <div class="card section-hidden" id="section-lists">
         <div class="step-header">
           <div class="step-num" id="num-2">2</div>
-          <div class="step-title">Confirmar listas</div>
+          <div class="step-title">Folder detectado</div>
         </div>
-        <div class="field-label">Lista de Cursos</div>
-        <select id="sel-courses" onchange="loadCourses()"><option value="">— selecione —</option></select>
-        <div class="field-label">Lista de Membros</div>
-        <select id="sel-members" onchange="loadMemberStatuses()"><option value="">— selecione —</option></select>
+        <div id="folder-info" style="font-size:13px;color:var(--text-sec);line-height:1.7;">
+          Carregando listas do folder...
+        </div>
         <div class="msg" id="msg-lists"></div>
       </div>
 
+      <!-- STEP 3 -->
       <div class="card section-hidden" id="section-courses">
         <div class="step-header">
           <div class="step-num" id="num-3">3</div>
@@ -143,6 +148,7 @@
         <div id="courses-list"><span class="empty">Carregando...</span></div>
       </div>
 
+      <!-- STEP 4 -->
       <div class="card section-hidden" id="section-members">
         <div class="step-header">
           <div class="step-num" id="num-4">4</div>
@@ -152,6 +158,7 @@
         <div id="members-list"><span class="empty">Carregando...</span></div>
       </div>
 
+      <!-- STEP 5 -->
       <div class="card section-hidden" id="section-action">
         <div class="step-header">
           <div class="step-num" id="num-5">5</div>
@@ -171,6 +178,7 @@
 
     </div>
 
+    <!-- ══ ABA: DASHBOARD ══ -->
     <div id="tab-dashboard" class="section-hidden">
       <div class="card">
         <div class="dash-header-row">
@@ -189,6 +197,25 @@
       </div>
     </div>
 
+    <!-- ══ ABA: RANKING ══ -->
+    <div id="tab-ranking" class="section-hidden">
+      <div class="card">
+        <div class="dash-header-row">
+          <div class="step-header" style="margin-bottom:0">
+            <div class="step-num">🏆</div>
+            <div class="step-title">Ranking de melhores cursos</div>
+          </div>
+          <button class="btn btn-outline" onclick="loadRanking()">↻ Atualizar</button>
+        </div>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:1rem">
+          Média das avaliações dos membros por curso, ordenado do melhor ao pior.
+        </p>
+        <div id="ranking-body">
+          <div class="dash-loading">Clique em "Atualizar" para carregar.</div>
+        </div>
+      </div>
+    </div>
+
   </main>
 
   <footer>
@@ -202,10 +229,13 @@
 function showTab(tab) {
   document.getElementById('tab-copiar').classList.toggle('section-hidden', tab !== 'copiar');
   document.getElementById('tab-dashboard').classList.toggle('section-hidden', tab !== 'dashboard');
+  document.getElementById('tab-ranking').classList.toggle('section-hidden', tab !== 'ranking');
   document.querySelectorAll('.nav-tab').forEach((btn, i) => {
-    btn.classList.toggle('active', (i===0&&tab==='copiar')||(i===1&&tab==='dashboard'));
+    btn.classList.toggle('active',
+      (i===0&&tab==='copiar')||(i===1&&tab==='dashboard')||(i===2&&tab==='ranking'));
   });
   if (tab === 'dashboard') loadDashboard();
+  if (tab === 'ranking') loadRanking();
 }
 
 function toggleFallback() {
@@ -238,6 +268,7 @@ window.autoConnectPatched = async function() {
   }
 };
 
+// override showApp para atualizar avatar e chamar versão patched
 const _backShowApp = window.showApp;
 window.showApp = function() {
   _backShowApp();
