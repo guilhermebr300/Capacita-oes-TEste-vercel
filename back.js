@@ -1,6 +1,5 @@
 const BASE = '/api/proxy';
 let allCourses = [], memberListId = null;
-const NEW_TASK_STATUS = 'Em progresso'; // status forçado ao criar/duplicar cursos
 let workspaceMembers = [];
 let currentUserEmail = '';
 
@@ -235,37 +234,57 @@ async function loadWorkspace() {
   document.getElementById('num-2').textContent = '✓';
   showMsg('msg-connect', `✓ Conectado ao espaço "${trilhaSpace.name}"!`, 'success');
 
-  await loadCoursesByArea();
+  await resolveCreationStatus();
   await loadMembers();
+  await loadCoursesByArea();
 }
 
-// ── CURSOS POR ÁREA ───────────────────────────────────────
+// ── STATUS REAL PARA NOVAS TAREFAS ────────────────────────
+// Em vez de forçar um nome fixo, procura o status da lista "Membros"
+// que corresponde a "em progresso" (ignorando maiúsculas/acentos),
+// pois o nome exato cadastrado no ClickUp pode variar.
+let creationStatusName = null;
+
+function normalizeStatus(s) {
+  return (s || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+async function resolveCreationStatus() {
+  creationStatusName = null;
+  try {
+    const listData = await apiFetch(`/list/${memberListId}`);
+    const statuses = listData.statuses || [];
+    const target = statuses.find(s => normalizeStatus(s.status).includes('progress'));
+    creationStatusName = target ? target.status : null;
+  } catch(e) { creationStatusName = null; }
+}
+
+// ── CURSOS POR ÁREA (agrupados pela 1ª etiqueta de cada curso) ──
 async function loadCoursesByArea() {
   document.getElementById('section-courses').classList.add('section-hidden');
   allCourses = [];
 
   try {
-    // busca tarefas de todas as listas de área em paralelo
-    const areaResults = await Promise.all(
-      courseAreaLists.map(async area => {
-        const data = await apiFetch(`/list/${area.id}/task?archived=false&page=0`);
+    // busca tarefas de todas as listas de curso em paralelo (Por área, Por soluções, etc.)
+    const listResults = await Promise.all(
+      courseAreaLists.map(async lst => {
+        const data = await apiFetch(`/list/${lst.id}/task?archived=false&page=0`);
         const tasks = data.tasks || [];
-        // busca detalhes (checklists) em paralelo por área
+        // busca detalhes (checklists) em paralelo
         const details = await Promise.all(tasks.map(t => apiFetch(`/task/${t.id}`).catch(() => t)));
-        return { area: area.name, tasks: details };
+        return details;
       })
     );
 
-    // monta allCourses e HTML agrupado por área
-    let html = `<label class="select-all-row"><input type="checkbox" onchange="toggleAll('course',this.checked)"> Selecionar todos</label>`;
-
+    // monta allCourses e agrupa por etiqueta (área) — usa a 1ª etiqueta do curso;
+    // sem etiqueta cai em "Sem área"
+    const groups = {}; // { areaLabel: [course, ...] }
     let totalCursos = 0;
-    for (const { area, tasks } of areaResults) {
-      if (!tasks.length) continue;
-      html += `<div class="area-group">
-        <div class="area-label">${area}</div>
-        <div class="list-grid">`;
 
+    for (const tasks of listResults) {
       for (const d of tasks) {
         const course = {
           id: d.id, name: d.name, tags: d.tags || [],
@@ -276,12 +295,33 @@ async function loadCoursesByArea() {
         allCourses.push(course);
         totalCursos++;
 
+        const areaLabel = course.tags.length ? course.tags[0].name : 'Sem área';
+        if (!groups[areaLabel]) groups[areaLabel] = [];
+        groups[areaLabel].push(course);
+      }
+    }
+
+    const areaNames = Object.keys(groups).sort((a, b) => {
+      if (a === 'Sem área') return 1;
+      if (b === 'Sem área') return -1;
+      return a.localeCompare(b);
+    });
+
+    let html = `<label class="select-all-row"><input type="checkbox" onchange="toggleAll('course',this.checked)"> Selecionar todos</label>`;
+
+    for (const areaLabel of areaNames) {
+      const courses = groups[areaLabel];
+      html += `<div class="area-group">
+        <div class="area-label">${areaLabel}</div>
+        <div class="list-grid">`;
+
+      for (const course of courses) {
         const tagHtml = course.tags.map(t => `<span class="tag">${t.name}</span>`).join('');
         const total = course.checklists.reduce((a, cl) => a + (cl.items?.length || 0), 0);
         const badge = total > 0 ? `<span class="checklist-badge">✓ ${total} itens</span>` : '';
-        html += `<div class="check-item" id="ci-c-${d.id}">
-          <input type="checkbox" class="chk-course" value="${d.id}" onchange="onCheck(this,'ci-c-${d.id}')">
-          <label onclick="this.previousElementSibling.click()">${d.name}${tagHtml}${badge}</label>
+        html += `<div class="check-item" id="ci-c-${course.id}">
+          <input type="checkbox" class="chk-course" value="${course.id}" onchange="onCheck(this,'ci-c-${course.id}')">
+          <label onclick="this.previousElementSibling.click()">${course.name}${tagHtml}${badge}</label>
         </div>`;
       }
       html += `</div></div>`;
@@ -347,8 +387,11 @@ function updateSummary() {
   const sect = document.getElementById('section-action');
   if (nc > 0 && nm > 0) {
     sect.classList.remove('section-hidden');
+    const statusInfo = creationStatusName
+      ? `com status inicial "<strong>${creationStatusName}</strong>"`
+      : `com o status padrão da lista <span style="color:var(--warn)">(nenhum status "em progresso" encontrado)</span>`;
     document.getElementById('summary').innerHTML =
-      `Serão criadas <strong>${nc * nm}</strong> tarefa(s): <strong>${nc}</strong> curso(s) × <strong>${nm}</strong> membro(s), atribuídas diretamente como responsável no ClickUp, com status inicial "<strong>${NEW_TASK_STATUS}</strong>".`;
+      `Serão criadas <strong>${nc * nm}</strong> tarefa(s): <strong>${nc}</strong> curso(s) × <strong>${nm}</strong> membro(s), atribuídas diretamente como responsável no ClickUp, ${statusInfo}.`;
   } else {
     sect.classList.add('section-hidden');
   }
@@ -373,7 +416,8 @@ async function copyCourses() {
     for (const course of courses) {
       document.getElementById('progress-label').textContent = `Copiando "${course.name}" → "${memberLabel}"...`;
       try {
-        const body = { name: course.name, assignees: [parseInt(memberId)], status: NEW_TASK_STATUS };
+        const body = { name: course.name, assignees: [parseInt(memberId)] };
+        if (creationStatusName) body.status = creationStatusName;
         if (course.markdown_description) body.markdown_description = course.markdown_description;
         else if (course.description) body.description = course.description;
         const created = await apiPost(`/list/${memberListId}/task`, body);
