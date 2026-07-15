@@ -307,12 +307,15 @@ async function loadCoursesByArea() {
       return a.localeCompare(b);
     });
 
-    let html = `<label class="select-all-row"><input type="checkbox" onchange="toggleAll('course',this.checked)"> Selecionar todos</label>`;
+    const AREA_COLORS = ['#2E96D9', '#8B5FBF', '#1E9E5A', '#D9822E', '#D9457B', '#3AA6A6', '#C9A227', '#5B6FD9'];
 
-    for (const areaLabel of areaNames) {
+    let html = '';
+
+    areaNames.forEach((areaLabel, i) => {
       const courses = groups[areaLabel];
-      html += `<div class="area-group">
-        <div class="area-label">${areaLabel}</div>
+      const color = AREA_COLORS[i % AREA_COLORS.length];
+      html += `<div class="area-group" style="--area-color:${color}">
+        <div class="area-label" style="background:${color}1A;border-color:${color}66;color:${color}">${areaLabel}</div>
         <div class="list-grid">`;
 
       for (const course of courses) {
@@ -325,7 +328,7 @@ async function loadCoursesByArea() {
         </div>`;
       }
       html += `</div></div>`;
-    }
+    });
 
     const el = document.getElementById('courses-list');
     document.getElementById('section-courses').classList.remove('section-hidden');
