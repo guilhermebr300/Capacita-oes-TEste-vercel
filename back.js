@@ -42,6 +42,7 @@ function clearManualKey() {
   if (input) input.value = '';
 }
 
+// ── HELPERS ───────────────────────────────────────────────
 function showMsg(id, text, type) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -77,6 +78,7 @@ async function apiPost(path, body) {
   return r.json();
 }
 
+// ── LOGIN ─────────────────────────────────────────────────
 async function handleLogin() {
   const emailInput = document.getElementById('login-email');
   const email = emailInput.value.trim().toLowerCase();
@@ -126,6 +128,7 @@ function showLogin() {
   document.getElementById('app-screen').style.display = 'none';
 }
 
+// ── AUTO CONNECT ──────────────────────────────────────────
 async function autoConnect() {
   showMsg('msg-connect', 'Conectando automaticamente...', 'info');
   // esconde o painel de fallback
@@ -153,6 +156,11 @@ async function connectWithManualKey() {
   }
 }
 
+// ── WORKSPACE ─────────────────────────────────────────────
+// Listas de áreas de cursos (ex: Projetos, IM...) e lista de Membros
+let courseAreaLists = []; // [{id, name}] — cada lista = uma área
+let memberListFound = null;
+
 async function loadWorkspace() {
   ['section-lists','section-courses','section-members','section-action']
     .forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('section-hidden'); });
@@ -161,6 +169,7 @@ async function loadWorkspace() {
   if (!teams.teams?.length) throw new Error('Nenhum workspace encontrado.');
   const teamId = teams.teams[0].id;
 
+  // membros do workspace
   try {
     const teamData = await apiFetch(`/team/${teamId}`);
     workspaceMembers = (teamData.team?.members || []).map(m => ({
@@ -170,69 +179,122 @@ async function loadWorkspace() {
     }));
   } catch(e) { workspaceMembers = []; }
 
+  // varre spaces procurando o folder "Trilha de Capacitações"
   const spaces = await apiFetch(`/team/${teamId}/space?archived=false`);
-  let allLists = [];
-  for (const sp of spaces.spaces) {
+  let trilhaFolder = null;
+
+  outer: for (const sp of spaces.spaces) {
     const fd = await apiFetch(`/space/${sp.id}/folder?archived=false`);
     for (const fo of fd.folders) {
-      const ld = await apiFetch(`/folder/${fo.id}/list?archived=false`);
-      for (const l of ld.lists) allLists.push({ id: l.id, label: `${sp.name} / ${fo.name} / ${l.name}`, raw: l.name });
+      if (fo.name.toLowerCase().includes('trilha') || fo.name.toLowerCase().includes('capacita')) {
+        trilhaFolder = fo;
+        break outer;
+      }
     }
-    const rd = await apiFetch(`/space/${sp.id}/list?archived=false`);
-    for (const l of rd.lists) allLists.push({ id: l.id, label: `${sp.name} / ${l.name}`, raw: l.name });
   }
-  if (!allLists.length) throw new Error('Nenhuma lista encontrada.');
 
-  const selC = document.getElementById('sel-courses');
-  const selM = document.getElementById('sel-members');
-  selC.innerHTML = '<option value="">— selecione a lista de cursos —</option>';
-  selM.innerHTML = '<option value="">— selecione a lista de membros —</option>';
-  for (const l of allLists) {
-    const n = l.raw.toLowerCase();
-    selC.appendChild(Object.assign(new Option(l.label, l.id), { selected: n.includes('curso') || n.includes('capacit') }));
-    selM.appendChild(Object.assign(new Option(l.label, l.id), { selected: n === 'membros' || n.includes('membro') }));
+  if (!trilhaFolder) throw new Error('Folder "Trilha de Capacitações" não encontrado. Verifique o nome no ClickUp.');
+
+  // listas dentro do folder — cada uma é uma área (Cursos, Membros, etc.)
+  const listsData = await apiFetch(`/folder/${trilhaFolder.id}/list?archived=false`);
+  const lists = listsData.lists || [];
+
+  courseAreaLists = [];
+  memberListFound = null;
+
+  for (const l of lists) {
+    const n = l.name.toLowerCase();
+    if (n.includes('membro')) {
+      memberListFound = l;
+    } else {
+      // tudo que não é Membros = área de cursos
+      courseAreaLists.push({ id: l.id, name: l.name });
+    }
   }
+
+  if (!courseAreaLists.length) throw new Error('Nenhuma lista de cursos encontrada dentro do folder.');
+  if (!memberListFound) throw new Error('Lista de Membros não encontrada dentro do folder.');
+
+  memberListId = memberListFound.id;
 
   const saved = localStorage.getItem('statusUserMap');
   statusUserMap = saved ? JSON.parse(saved) : {};
 
+  // mostra info do folder no step 2
+  const folderInfoEl = document.getElementById('folder-info');
+  if (folderInfoEl) {
+    folderInfoEl.innerHTML = `
+      <span style="display:inline-flex;align-items:center;gap:8px;background:var(--sky-light);padding:8px 14px;border-radius:var(--radius);border:1px solid var(--border);">
+        📁 <strong>${trilhaFolder.name}</strong>
+        <span style="color:var(--muted)">·</span>
+        <span style="color:var(--muted)">${courseAreaLists.length} área(s) de cursos</span>
+        <span style="color:var(--muted)">·</span>
+        <span style="color:var(--muted)">Membros: <strong style="color:var(--text-sec)">${memberListFound.name}</strong></span>
+      </span>`;
+  }
   document.getElementById('section-lists').classList.remove('section-hidden');
-  showMsg('msg-connect', '✓ Conectado!', 'success');
-  if (selC.value) loadCourses();
-  if (selM.value) loadMemberStatuses();
+  document.getElementById('num-2').classList.add('done');
+  document.getElementById('num-2').textContent = '✓';
+  showMsg('msg-connect', `✓ Conectado! Folder encontrado com ${courseAreaLists.length} área(s).`, 'success');
+
+  // carrega cursos por área e membros automaticamente
+  await loadCoursesByArea();
+  await loadMemberStatuses();
 }
 
-// ── CURSOS ────────────────────────────────────────────────
-async function loadCourses() {
-  const listId = document.getElementById('sel-courses').value;
-  if (!listId) return;
+// ── CURSOS POR ÁREA ───────────────────────────────────────
+async function loadCoursesByArea() {
   document.getElementById('section-courses').classList.add('section-hidden');
   allCourses = [];
+
   try {
-    const data = await apiFetch(`/list/${listId}/task?archived=false&page=0`);
-    const tasks = data.tasks || [];
-    const details = await Promise.all(tasks.map(t => apiFetch(`/task/${t.id}`).catch(() => t)));
-    allCourses = details.map(d => ({
-      id: d.id, name: d.name, tags: d.tags || [],
-      description: d.description || '',
-      markdown_description: d.markdown_description || '',
-      checklists: d.checklists || []
-    }));
+    // busca tarefas de todas as listas de área em paralelo
+    const areaResults = await Promise.all(
+      courseAreaLists.map(async area => {
+        const data = await apiFetch(`/list/${area.id}/task?archived=false&page=0`);
+        const tasks = data.tasks || [];
+        // busca detalhes (checklists) em paralelo por área
+        const details = await Promise.all(tasks.map(t => apiFetch(`/task/${t.id}`).catch(() => t)));
+        return { area: area.name, tasks: details };
+      })
+    );
+
+    // monta allCourses e HTML agrupado por área
+    let html = `<label class="select-all-row"><input type="checkbox" onchange="toggleAll('course',this.checked)"> Selecionar todos</label>`;
+
+    let totalCursos = 0;
+    for (const { area, tasks } of areaResults) {
+      if (!tasks.length) continue;
+      html += `<div class="area-group">
+        <div class="area-label">${area}</div>
+        <div class="list-grid">`;
+
+      for (const d of tasks) {
+        const course = {
+          id: d.id, name: d.name, tags: d.tags || [],
+          description: d.description || '',
+          markdown_description: d.markdown_description || '',
+          checklists: d.checklists || []
+        };
+        allCourses.push(course);
+        totalCursos++;
+
+        const tagHtml = course.tags.map(t => `<span class="tag">${t.name}</span>`).join('');
+        const total = course.checklists.reduce((a, cl) => a + (cl.items?.length || 0), 0);
+        const badge = total > 0 ? `<span class="checklist-badge">✓ ${total} itens</span>` : '';
+        html += `<div class="check-item" id="ci-c-${d.id}">
+          <input type="checkbox" class="chk-course" value="${d.id}" onchange="onCheck(this,'ci-c-${d.id}')">
+          <label onclick="this.previousElementSibling.click()">${d.name}${tagHtml}${badge}</label>
+        </div>`;
+      }
+      html += `</div></div>`;
+    }
+
     const el = document.getElementById('courses-list');
     document.getElementById('section-courses').classList.remove('section-hidden');
-    if (!allCourses.length) { el.innerHTML = '<span class="empty">Nenhuma tarefa encontrada.</span>'; return; }
-    document.getElementById('count-courses').textContent = allCourses.length + ' cursos';
-    let html = `<label class="select-all-row"><input type="checkbox" onchange="toggleAll('course',this.checked)"> Selecionar todos</label><div class="list-grid">`;
-    for (const c of allCourses) {
-      const tagHtml = c.tags.map(t => `<span class="tag">${t.name}</span>`).join('');
-      const total = c.checklists.reduce((a, cl) => a + (cl.items?.length || 0), 0);
-      const badge = total > 0 ? `<span class="checklist-badge">✓ ${total} itens</span>` : '';
-      html += `<div class="check-item" id="ci-c-${c.id}">
-        <input type="checkbox" class="chk-course" value="${c.id}" onchange="onCheck(this,'ci-c-${c.id}')">
-        <label onclick="this.previousElementSibling.click()">${c.name}${tagHtml}${badge}</label>
-      </div>`;
-    }
-    html += '</div>';
+
+    if (!totalCursos) { el.innerHTML = '<span class="empty">Nenhum curso encontrado.</span>'; return; }
+    document.getElementById('count-courses').textContent = totalCursos + ' cursos';
     el.innerHTML = html;
     updateSummary();
   } catch(e) { showMsg('msg-lists', 'Erro ao carregar cursos: ' + e.message, 'error'); }
@@ -240,9 +302,7 @@ async function loadCourses() {
 
 // ── MEMBROS ───────────────────────────────────────────────
 async function loadMemberStatuses() {
-  const listId = document.getElementById('sel-members').value;
-  if (!listId) return;
-  memberListId = listId;
+  if (!memberListId) return;
   document.getElementById('section-members').classList.add('section-hidden');
   allStatuses = [];
   try {
@@ -486,3 +546,139 @@ window.addEventListener('DOMContentLoaded', () => {
     showLogin();
   }
 });
+
+// ── RANKING DE MELHORES CURSOS ────────────────────────────
+async function loadRanking() {
+  if (!memberListId) {
+    const listId = document.getElementById('sel-members')?.value;
+    if (!listId) {
+      document.getElementById('ranking-body').innerHTML =
+        '<div class="dash-loading">Conecte primeiro na aba Copiar cursos.</div>';
+      return;
+    }
+    memberListId = listId;
+  }
+
+  document.getElementById('ranking-body').innerHTML =
+    '<div class="dash-loading">⏳ Buscando avaliações...</div>';
+
+  try {
+    // busca todas as tarefas da lista de membros com campos customizados
+    const data = await apiFetch(
+      `/list/${memberListId}/task?archived=false&include_closed=true&custom_fields=true&page=0`
+    );
+    const tasks = data.tasks || [];
+
+    // agrupa por nome do curso e coleta notas
+    const courseMap = {}; // { nomeCurso: { notas: [], totalConcluidos: 0, total: 0 } }
+
+    for (const task of tasks) {
+      const name = task.name;
+      if (!courseMap[name]) courseMap[name] = { notas: [], concluidos: 0, total: 0 };
+      courseMap[name].total++;
+      if (task.status?.type === 'closed') courseMap[name].concluidos++;
+
+      // busca campo customizado "Avaliação do curso"
+      const fields = task.custom_fields || [];
+      const ratingField = fields.find(f =>
+        f.name?.toLowerCase().includes('avalia') ||
+        f.name?.toLowerCase().includes('rating') ||
+        f.name?.toLowerCase().includes('nota')
+      );
+      if (ratingField && ratingField.value !== null && ratingField.value !== undefined) {
+        const val = parseFloat(ratingField.value);
+        if (!isNaN(val) && val > 0) courseMap[name].notas.push(val);
+      }
+    }
+
+    // monta lista ordenada por média
+    const cursos = Object.entries(courseMap)
+      .map(([nome, info]) => {
+        const media = info.notas.length > 0
+          ? info.notas.reduce((a, b) => a + b, 0) / info.notas.length
+          : null;
+        return { nome, media, avaliacoes: info.notas.length, total: info.total, concluidos: info.concluidos, notas: info.notas };
+      })
+      .sort((a, b) => {
+        // cursos com nota vêm primeiro, depois por média desc, depois por nome
+        if (a.media === null && b.media === null) return a.nome.localeCompare(b.nome);
+        if (a.media === null) return 1;
+        if (b.media === null) return -1;
+        return b.media - a.media;
+      });
+
+    if (!cursos.length) {
+      document.getElementById('ranking-body').innerHTML =
+        '<div class="empty">Nenhum curso encontrado na lista de membros.</div>';
+      return;
+    }
+
+    // divide: com avaliação e sem avaliação
+    const comNota   = cursos.filter(c => c.media !== null);
+    const semNota   = cursos.filter(c => c.media === null);
+
+    let html = '';
+
+    if (comNota.length) {
+      html += '<div class="ranking-list">';
+      comNota.forEach((curso, idx) => {
+        const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `<span class="rank-num">${idx+1}</span>`;
+        const stars = renderStars(curso.media);
+        const pctConcluido = curso.total > 0 ? Math.round((curso.concluidos/curso.total)*100) : 0;
+        const barColor = curso.media >= 4 ? '#1E9E5A' : curso.media >= 3 ? '#5BB8F5' : '#F0A020';
+        html += `
+          <div class="ranking-item">
+            <div class="ranking-pos">${medal}</div>
+            <div class="ranking-info">
+              <div class="ranking-name">${curso.nome}</div>
+              <div class="ranking-meta">
+                <span class="ranking-stars">${stars}</span>
+                <span class="ranking-avg">${curso.media.toFixed(1)}</span>
+                <span class="ranking-count">(${curso.avaliacoes} avaliação${curso.avaliacoes>1?'ões':''})</span>
+                <span class="ranking-sep">·</span>
+                <span class="ranking-done">${curso.concluidos}/${curso.total} concluídos</span>
+              </div>
+              <div class="ranking-bar-wrap">
+                <div class="ranking-bar">
+                  <div class="ranking-bar-fill" style="width:${(curso.media/5)*100}%;background:${barColor}"></div>
+                </div>
+                <span class="ranking-pct-right">${pctConcluido}% concluído</span>
+              </div>
+            </div>
+          </div>`;
+      });
+      html += '</div>';
+    }
+
+    if (semNota.length) {
+      html += `
+        <div class="ranking-sem-nota-title">
+          📝 Ainda sem avaliação (${semNota.length})
+        </div>
+        <div class="ranking-sem-nota-list">`;
+      semNota.forEach(curso => {
+        const pct = curso.total > 0 ? Math.round((curso.concluidos/curso.total)*100) : 0;
+        html += `
+          <div class="ranking-sem-nota-item">
+            <span class="ranking-sem-nome">${curso.nome}</span>
+            <span class="ranking-sem-meta">${curso.concluidos}/${curso.total} concluídos · ${pct}%</span>
+          </div>`;
+      });
+      html += '</div>';
+    }
+
+    document.getElementById('ranking-body').innerHTML = html;
+
+  } catch(e) {
+    document.getElementById('ranking-body').innerHTML =
+      `<div class="msg show error">Erro ao carregar ranking: ${e.message}</div>`;
+  }
+}
+
+function renderStars(media) {
+  if (media === null) return '☆☆☆☆☆';
+  const full  = Math.floor(media);
+  const half  = (media - full) >= 0.5 ? 1 : 0;
+  const empty = 5 - full - half;
+  return '★'.repeat(full) + (half ? '⯨' : '') + '☆'.repeat(empty);
+}
