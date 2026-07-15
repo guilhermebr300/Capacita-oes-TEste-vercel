@@ -258,13 +258,22 @@ function setConnStatus(state, text) {
 const _origAutoConnect = autoConnect;
 window.autoConnectPatched = async function() {
   setConnStatus('loading', 'Conectando automaticamente...');
+  document.getElementById('fallback-wrap').style.display = 'none';
+  hideMsg('msg-connect');
   try {
     await loadWorkspace();
     setConnStatus('connected', 'Conectado ao ClickUp');
     document.getElementById('fallback-wrap').style.display = 'none';
   } catch(e) {
-    setConnStatus('error', 'Falha na conexão automática');
+    const msg = e.message || 'Erro desconhecido';
+    setConnStatus('error', 'Falha: ' + msg);
+    showMsg('msg-connect', '⚠ ' + msg + ' — cole sua API Key abaixo para continuar.', 'warn');
     document.getElementById('fallback-wrap').style.display = 'block';
+    // abre o painel automaticamente
+    const body = document.getElementById('fallback-body');
+    const icon = document.getElementById('fallback-icon');
+    if (body) body.classList.add('open');
+    if (icon) { icon.classList.add('open'); icon.textContent = '▲'; }
   }
 };
 
