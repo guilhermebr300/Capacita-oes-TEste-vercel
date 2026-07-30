@@ -772,8 +772,7 @@ async function loadRanking() {
   try {
     // busca todas as tarefas da lista de membros com campos customizados
     const tasks = await apiFetchAllPages(
-      `/list/${memberListId}/task?archived=false&include_closed=true&custom_fields=true&`
-    );
+`/list/${memberListId}/task?archived=false&include_closed=true&`    );
 
     // agrupa por nome do curso e coleta notas
     const courseMap = {}; // { nomeCurso: { notas: [], totalConcluidos: 0, total: 0 } }
