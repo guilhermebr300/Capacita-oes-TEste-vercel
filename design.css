@@ -405,6 +405,7 @@ select option { background: #fff; color: var(--text); }
 }
 .login-domain-hint { font-size: 11px; color: var(--muted); margin-top: 14px; }
 .login-domain-hint span { color: var(--sky-darker, var(--sky-dark)); font-weight: 600; }
+.login-google-wrap { display: flex; justify-content: center; margin: 6px 0 4px; }
 
 /* ── FOOTER ── */
 footer {
