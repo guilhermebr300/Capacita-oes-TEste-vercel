@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Trilha de Capacitações — Estat Júnior</title>
+<title>Trilha de Capacitações Estat Júnior</title>
 <link rel="icon" type="image/svg+xml" sizes="48x48" href="marca.svg">
 <link rel="shortcut icon" href="marca.svg">
 <link rel="apple-touch-icon" href="marca.svg">
@@ -48,7 +48,7 @@
       </div>
     </div>
 
-    <p class="login-domain-hint">Acesso restrito a <span>@estatjr.com.br</span></p>
+    <p class="login-domain-hint">Acesso restrito a <span>Email da ESTAT</span></p>
   </div>
 </div>
 
@@ -89,9 +89,9 @@
 
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showTab('copiar')"> Copiar cursos</button>
-    <button class="nav-tab" onclick="showTab('dashboard')">📊 Acompanhamento</button>
-    <button class="nav-tab" onclick="showTab('ranking')">🏆 Melhores cursos</button>
-    <button class="nav-tab" id="nav-tab-rh" style="display:none" onclick="showTab('rh')">🧑‍💼 RH</button>
+    <button class="nav-tab" onclick="showTab('dashboard')"> Acompanhamento</button>
+    <button class="nav-tab" onclick="showTab('ranking')"> Melhores cursos</button>
+    <button class="nav-tab" onclick="showTab('rh')"> RH</button>
   </div>
 
   <main class="main">
@@ -114,7 +114,7 @@
         <!-- se der merda para conectar a api -->
         <div id="fallback-wrap" style="margin-top:12px; display:none;">
           <div class="fallback-toggle" onclick="toggleFallback()">
-            <span class="fallback-toggle-label">Problema na conexão — clique para inserir API Key</span>
+            <span class="fallback-toggle-label">Problema na conexão clique para inserir API Key</span>
             <span class="fallback-toggle-icon" id="fallback-icon">▼</span>
           </div>
           <div class="fallback-body" id="fallback-body">
@@ -220,9 +220,8 @@
     <!-- RH -->
     <div id="tab-rh" class="section-hidden">
       <div class="card" style="text-align:center; padding:48px 24px;">
-        <div style="font-size:40px; margin-bottom:12px;">🚧</div>
         <div class="step-title" style="margin-bottom:8px;">Acompanhamento do RH</div>
-        <p style="font-size:13px; color:var(--muted);">Em construção — em breve por aqui.</p>
+        <p style="font-size:13px; color:var(--muted);">Em construção,em breve por aqui.</p>
       </div>
     </div>
 
@@ -235,7 +234,6 @@
 <script src="back.js"></script>
 <script>
 function showTab(tab) {
-  if (tab === 'rh' && !currentUserIsHR) return; // segunda trava, além do botão escondido
   document.getElementById('tab-copiar').classList.toggle('section-hidden', tab !== 'copiar');
   document.getElementById('tab-dashboard').classList.toggle('section-hidden', tab !== 'dashboard');
   document.getElementById('tab-ranking').classList.toggle('section-hidden', tab !== 'ranking');
