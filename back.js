@@ -645,7 +645,50 @@ async function loadDashboard() {
     }
     summaryHtml += '</div>';
 
-    document.getElementById('dashboard-body').innerHTML = summaryHtml;
+    // detalhe por membro — fica ESCONDIDO por padrão (display:none no
+    // wrapper); só aparece quando a pessoa clica num card lá em cima
+    // (ver applyDashboardFilter, que também garante que só o detalhe do
+    // membro clicado fica visível ali dentro).
+    let detailHtml = '';
+    for (const key of memberKeys) {
+      const { name, tasks: memberTasks } = byMember[key];
+      detailHtml += `<div class="dash-member" data-member-key="${key}">
+        <div class="dash-member-header">
+          <strong>${name}</strong>
+          <span class="dash-count">${memberTasks.length} curso(s)</span>
+        </div>`;
+      if (!memberTasks.length) {
+        detailHtml += `<div class="dash-empty-member">Nenhum curso atribuído ainda.</div>`;
+      } else {
+        detailHtml += `<div class="dash-courses">`;
+        for (const task of memberTasks) {
+          const d = detailMap[task.id];
+          const cls = d?.checklists || [];
+          const totalItems = cls.reduce((a,cl) => a+(cl.items?.length||0), 0);
+          const doneItems  = cls.reduce((a,cl) => a+(cl.items?.filter(i=>i.resolved).length||0), 0);
+          const pct = totalItems > 0 ? Math.round((doneItems/totalItems)*100) : 0;
+          const isClosed = task.status?.type === 'closed';
+          const barColor = '#2E96D9'; // azul da Estat
+          detailHtml += `<div class="dash-course-row">
+            <div class="dash-course-top">
+              <span class="dash-course-name ${isClosed?'done-text':''}">${isClosed?'✓ ':''}${task.name}</span>
+              <span class="dash-course-pct-badge" style="background:${barColor}20;color:${barColor};border-color:${barColor}40">${pct}%</span>
+            </div>
+            <div class="dash-progress-wrap">
+              <div class="dash-progress-bar">
+                <div class="dash-progress-fill" style="width:${pct}%;background:${barColor}"></div>
+              </div>
+              <span class="dash-pct">${doneItems}/${totalItems} itens</span>
+            </div>
+          </div>`;
+        }
+        detailHtml += `</div>`;
+      }
+      detailHtml += `</div>`;
+    }
+
+    document.getElementById('dashboard-body').innerHTML =
+      summaryHtml + `<div id="dash-detail-wrap" style="margin-top:1.5rem;display:none">${detailHtml}</div>`;
     applyDashboardFilter();
   } catch(e) {
     document.getElementById('dashboard-body').innerHTML = `<div class="msg show error">Erro: ${e.message}</div>`;
@@ -671,11 +714,18 @@ function applyDashboardFilter() {
 
   document.querySelectorAll('.dash-member-card').forEach(card => {
     const isMatch = card.dataset.memberKey === dashboardFilterKey;
-    card.style.display = (!dashboardFilterKey || isMatch) ? '' : 'none';
     card.classList.toggle('dash-card-active', isMatch);
+    // com filtro ativo, deixa só o card clicado; sem filtro, mostra todos
+    card.style.display = (!dashboardFilterKey || isMatch) ? '' : 'none';
   });
+
+  // o bloco de detalhe inteiro só aparece quando algum membro está
+  // selecionado — sem clique nenhum, fica escondido
+  const detailWrap = document.getElementById('dash-detail-wrap');
+  if (detailWrap) detailWrap.style.display = dashboardFilterKey ? '' : 'none';
+
   document.querySelectorAll('.dash-member').forEach(det => {
-    det.style.display = (!dashboardFilterKey || det.dataset.memberKey === dashboardFilterKey) ? '' : 'none';
+    det.style.display = (det.dataset.memberKey === dashboardFilterKey) ? '' : 'none';
   });
 }
 
