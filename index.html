@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Raleway:wght@700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="design.css">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
@@ -27,20 +28,27 @@
     <img src="estatigrao.png" alt="Tigrão" width="100" class="login-tiger">
 
     <div class="login-title">Bem-vindo!</div>
-    <p class="login-sub">Digite seu email institucional para acessar a ferramenta de capacitações da Estat Júnior.</p>
+    <p class="login-sub">Entre com sua conta Google institucional para acessar a ferramenta de capacitações da Estat Júnior.</p>
 
     <div class="login-error" id="login-error"></div>
 
-    <input
-      class="login-input"
-      type="email"
-      id="login-email"
-      autocomplete="email"
-      onkeydown="if(event.key==='Enter') handleLogin()"
-    />
+    <div class="login-google-wrap">
+      <div id="g_id_onload"
+        data-client_id="286209182292-l8cvud3b33hp5fapdum6tqg4sk2dcfqg.apps.googleusercontent.com"
+        data-callback="handleGoogleCredential"
+        data-auto_prompt="false">
+      </div>
+      <div class="g_id_signin"
+        data-type="standard"
+        data-shape="pill"
+        data-theme="outline"
+        data-text="signin_with"
+        data-size="large"
+        data-logo_alignment="left">
+      </div>
+    </div>
 
-    <button class="login-btn" id="btn-login" onclick="handleLogin()">Entrar →</button>
-
+    <p class="login-domain-hint">Acesso restrito a <span>@estatjr.com.br</span></p>
   </div>
 </div>
 
