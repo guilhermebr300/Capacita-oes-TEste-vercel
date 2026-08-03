@@ -375,13 +375,6 @@ function resolveCustomFieldLabel(field) {
 }
 
 function getAreaLabel(course) {
-  // Agrupamento único via Custom Field (nome contendo "área"/"solução"/
-  // "grupo"). A lógica antiga usava a 1ª Tag do curso, mas as Tags do
-  // ClickUp aqui têm vários valores não-exclusivos por curso (ex: um
-  // curso marcado com "im", "vendas" E "marketing" ao mesmo tempo) —
-  // usar só a primeira misturava os cursos em áreas erradas. O Custom
-  // Field é a fonte confiável porque é o mesmo campo que o ClickUp usa
-  // pra agrupar ("Grupo: ...") em ambas as listas, "Por área" e "Por soluções".
   const fields = course.custom_fields || [];
   const groupField = fields.find(f => {
     const n = normalizeStatus(f.name);
@@ -411,21 +404,14 @@ async function loadCoursesByArea() {
   allCourses = [];
 
   try {
-    // busca tarefas de todas as listas de curso em paralelo (Por área, Por soluções, etc.)
     const listResults = await Promise.all(
       courseAreaLists.map(async lst => {
         const tasks = await apiFetchAllPages(`/list/${lst.id}/task?archived=false&`);
-        // busca detalhes (checklists) com cache — só rebusca no ClickUp
-        // as tasks cujo date_updated mudou desde a última vez
         const details = await Promise.all(tasks.map(t => getTaskDetailCached(t)));
         return details;
       })
     );
 
-    // monta allCourses e agrupa por área/solução — usa a 1ª etiqueta (Tag)
-    // do curso; se não tiver Tag, tenta um Custom Field do tipo "Grupo/
-    // Área/Solução" (é assim que a lista "Por soluções" agrupa no ClickUp,
-    // por isso ela não caía no caso das Tags); sem nenhum dos dois, "Sem área"
     const groups = {}; // { areaLabel: [course, ...] }
     let totalCursos = 0;
 
@@ -487,7 +473,6 @@ async function loadCoursesByArea() {
 }
 
 // ── MEMBROS ───────────────────────────────────────────────
-// Membro = pessoa do workspace (assignee), não um status do ClickUp.
 async function loadMembers() {
   document.getElementById('section-members').classList.add('section-hidden');
   try {
@@ -606,7 +591,6 @@ async function loadDashboard() {
   try {
     const tasks = await apiFetchAllPages(`/list/${memberListId}/task?archived=false&subtasks=true&include_closed=true&`);
 
-    // agrupa por responsável (assignee)
     const byMember = {}; // key -> { name, tasks: [] }
     for (const t of tasks) {
       const assignees = (t.assignees && t.assignees.length) ? t.assignees : [{ id: '_sem', username: 'Sem responsável' }];
@@ -617,8 +601,6 @@ async function loadDashboard() {
       }
     }
 
-    // detalhes (checklists) com cache — mesma lógica de getTaskDetailCached:
-    // só rebusca no ClickUp as tasks cujo date_updated mudou
     const details = await Promise.all(tasks.map(t => getTaskDetailCached(t).catch(()=>null)));
     const detailMap = {};
     for (const d of details) if (d) detailMap[d.id] = d;
@@ -641,7 +623,7 @@ async function loadDashboard() {
         doneAll  += cls.reduce((a,cl) => a+(cl.items?.filter(i=>i.resolved).length||0), 0);
       }
       const pctAll = totalAll > 0 ? Math.round((doneAll/totalAll)*100) : 0;
-      const ring = pctAll === 100 ? '#1E9E5A' : pctAll > 50 ? '#5BB8F5' : pctAll > 0 ? '#F0A020' : '#CCE8F7';
+      const ring = '#2E96D9'; // azul da Estat (mesma cor de marca usada no resto do site)
       summaryHtml += `
         <div class="dash-member-card" data-member-key="${key}" onclick="filterDashboardMember('${key}')" title="Clique para ver só ${name}">
           <div class="dash-ring-wrap">
@@ -663,48 +645,7 @@ async function loadDashboard() {
     }
     summaryHtml += '</div>';
 
-    // detalhe por membro
-    let detailHtml = '';
-    for (const key of memberKeys) {
-      const { name, tasks: memberTasks } = byMember[key];
-      detailHtml += `<div class="dash-member" data-member-key="${key}">
-        <div class="dash-member-header">
-          <strong>${name}</strong>
-          <span class="dash-count">${memberTasks.length} curso(s)</span>
-        </div>`;
-      if (!memberTasks.length) {
-        detailHtml += `<div class="dash-empty-member">Nenhum curso atribuído ainda.</div>`;
-      } else {
-        detailHtml += `<div class="dash-courses">`;
-        for (const task of memberTasks) {
-          const d = detailMap[task.id];
-          const cls = d?.checklists || [];
-          const totalItems = cls.reduce((a,cl) => a+(cl.items?.length||0), 0);
-          const doneItems  = cls.reduce((a,cl) => a+(cl.items?.filter(i=>i.resolved).length||0), 0);
-          const pct = totalItems > 0 ? Math.round((doneItems/totalItems)*100) : 0;
-          const isClosed = task.status?.type === 'closed';
-          const barColor = pct===100 ? '#1E9E5A' : pct>50 ? '#5BB8F5' : pct>0 ? '#F0A020' : '#CCE8F7';
-          detailHtml += `<div class="dash-course-row">
-            <div class="dash-course-top">
-              <span class="dash-course-name ${isClosed?'done-text':''}">${isClosed?'✓ ':''}${task.name}</span>
-              <span class="dash-course-pct-badge" style="background:${barColor}20;color:${barColor};border-color:${barColor}40">${pct}%</span>
-            </div>
-            <div class="dash-progress-wrap">
-              <div class="dash-progress-bar">
-                <div class="dash-progress-fill" style="width:${pct}%;background:${barColor}"></div>
-              </div>
-              <span class="dash-pct">${doneItems}/${totalItems} itens</span>
-            </div>
-          </div>`;
-        }
-        detailHtml += `</div>`;
-      }
-      detailHtml += `</div>`;
-    }
-
-    document.getElementById('dashboard-body').innerHTML = summaryHtml + '<div style="margin-top:1.5rem">' + detailHtml + '</div>';
-    // se já tinha alguém filtrado (ex: deu "Atualizar" olhando o progresso
-    // de uma pessoa), reaplica o filtro no novo HTML em vez de perder o estado
+    document.getElementById('dashboard-body').innerHTML = summaryHtml;
     applyDashboardFilter();
   } catch(e) {
     document.getElementById('dashboard-body').innerHTML = `<div class="msg show error">Erro: ${e.message}</div>`;
@@ -712,14 +653,10 @@ async function loadDashboard() {
 }
 
 // ── FILTRO "SÓ ESSA PESSOA" NO DASHBOARD ──────────────────
-// Com a empresa crescendo (~30 membros), a lista de progresso fica
-// poluída. Clicar num card de resumo esconde todo o resto (outros cards
-// + outros blocos de detalhe) e deixa só a pessoa clicada visível.
-// Clicar de novo no mesmo card, ou no botão "Mostrar todos", desfaz.
 let dashboardFilterKey = null;
 
 function filterDashboardMember(key) {
-  dashboardFilterKey = (dashboardFilterKey === key) ? null : key; // clique de novo = desfaz
+  dashboardFilterKey = (dashboardFilterKey === key) ? null : key;
   applyDashboardFilter();
 }
 
@@ -763,13 +700,11 @@ async function loadRanking() {
     '<div class="dash-loading">⏳ Buscando avaliações...</div>';
 
   try {
-    // busca todas as tarefas da lista de membros com campos customizados
     const tasks = await apiFetchAllPages(
       `/list/${memberListId}/task?archived=false&include_closed=true&`
     );
 
-    // agrupa por nome do curso e coleta notas
-    const courseMap = {}; // { nomeCurso: { notas: [], totalConcluidos: 0, total: 0 } }
+    const courseMap = {};
 
     for (const task of tasks) {
       const name = task.name;
@@ -777,7 +712,6 @@ async function loadRanking() {
       courseMap[name].total++;
       if (task.status?.type === 'closed') courseMap[name].concluidos++;
 
-      // busca campo customizado "Avaliação do curso"
       const fields = task.custom_fields || [];
       const ratingField = fields.find(f =>
         f.name?.toLowerCase().includes('avalia') ||
@@ -790,7 +724,6 @@ async function loadRanking() {
       }
     }
 
-    // monta lista ordenada por média
     const cursos = Object.entries(courseMap)
       .map(([nome, info]) => {
         const media = info.notas.length > 0
@@ -799,7 +732,6 @@ async function loadRanking() {
         return { nome, media, avaliacoes: info.notas.length, total: info.total, concluidos: info.concluidos, notas: info.notas };
       })
       .sort((a, b) => {
-        // cursos com nota vêm primeiro, depois por média desc, depois por nome
         if (a.media === null && b.media === null) return a.nome.localeCompare(b.nome);
         if (a.media === null) return 1;
         if (b.media === null) return -1;
@@ -812,7 +744,6 @@ async function loadRanking() {
       return;
     }
 
-    // divide: com avaliação e sem avaliação
     const comNota   = cursos.filter(c => c.media !== null);
     const semNota   = cursos.filter(c => c.media === null);
 
