@@ -314,7 +314,7 @@ async function loadWorkspace() {
     folderInfoEl.innerHTML = `
       <span style="display:inline-flex;align-items:center;gap:8px;background:var(--sky-light);padding:8px 14px;border-radius:var(--radius);border:1px solid var(--border);flex-wrap:wrap;">
          <strong>${trilhaSpace.name}</strong>
-        <span style="color:var(--muted)">·</span>
+         <span style="color:var(--muted)">·</span>
         <span style="color:var(--muted)">${courseAreaLists.length} lista(s) de cursos</span>
         <span style="color:var(--muted)">·</span>
         <span style="color:var(--muted)">Membros: <strong style="color:var(--text-sec)">${memberListFound.name}</strong></span>
