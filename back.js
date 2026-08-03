@@ -313,7 +313,7 @@ async function loadWorkspace() {
   if (folderInfoEl) {
     folderInfoEl.innerHTML = `
       <span style="display:inline-flex;align-items:center;gap:8px;background:var(--sky-light);padding:8px 14px;border-radius:var(--radius);border:1px solid var(--border);flex-wrap:wrap;">
-        🚀 <strong>${trilhaSpace.name}</strong>
+         <strong>${trilhaSpace.name}</strong>
         <span style="color:var(--muted)">·</span>
         <span style="color:var(--muted)">${courseAreaLists.length} lista(s) de cursos</span>
         <span style="color:var(--muted)">·</span>
@@ -852,7 +852,7 @@ async function loadRanking() {
     if (semNota.length) {
       html += `
         <div class="ranking-sem-nota-title">
-          📝 Ainda sem avaliação (${semNota.length})
+           Ainda sem avaliação (${semNota.length})
         </div>
         <div class="ranking-sem-nota-list">`;
       semNota.forEach(curso => {
