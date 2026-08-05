@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Trilha de Capacitações</title>
+<title>Trilha de Capacitações — Estat Júnior</title>
 <link rel="icon" type="image/svg+xml" sizes="48x48" href="marca.svg">
 <link rel="shortcut icon" href="marca.svg">
 <link rel="apple-touch-icon" href="marca.svg">
@@ -28,7 +28,7 @@
     <img src="estatigrao.png" alt="Tigrão" width="100" class="login-tiger">
 
     <div class="login-title">Bem-vindo!</div>
-    <p class="login-sub">Entre somente com o Email da ESTAT, zé.</p>
+    <p class="login-sub">Entre com sua conta Google institucional para acessar a ferramenta de capacitações da Estat Júnior.</p>
 
     <div class="login-error" id="login-error"></div>
 
@@ -47,6 +47,8 @@
         data-logo_alignment="left">
       </div>
     </div>
+
+    <p class="login-domain-hint">Acesso restrito a <span>@estatjr.com.br</span></p>
   </div>
 </div>
 
@@ -77,7 +79,7 @@
       <p>1.Escolha os membros</p>  
       <p>2.Escolha os cursos</p>
       <p>3.Clica no botão para duplicar</p>
-      <p>4.Da uma olhadinha no clickup</p>
+       <p>4.Da uma olhadinha no clickup</p>
 💙
     </div>
     <div class="hero-tiger">
@@ -87,9 +89,9 @@
 
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showTab('copiar')"> Copiar cursos</button>
-    <button class="nav-tab" onclick="showTab('dashboard')"> Acompanhamento</button>
-    <button class="nav-tab" onclick="showTab('ranking')"> Melhores cursos</button>
-    <button class="nav-tab" onclick="showTab('rh')"> RH</button>
+    <button class="nav-tab" onclick="showTab('dashboard')">📊 Acompanhamento</button>
+    <button class="nav-tab" onclick="showTab('ranking')">🏆 Melhores cursos</button>
+    <button class="nav-tab" id="nav-tab-rh" style="display:none" onclick="showTab('rh')">🧑‍💼 Gestão de Pessoas</button>
   </div>
 
   <main class="main">
@@ -112,7 +114,7 @@
         <!-- se der merda para conectar a api -->
         <div id="fallback-wrap" style="margin-top:12px; display:none;">
           <div class="fallback-toggle" onclick="toggleFallback()">
-            <span class="fallback-toggle-label">Problema na conexão clique para inserir API Key</span>
+            <span class="fallback-toggle-label">Problema na conexão — clique para inserir API Key</span>
             <span class="fallback-toggle-icon" id="fallback-icon">▼</span>
           </div>
           <div class="fallback-body" id="fallback-body">
@@ -165,7 +167,7 @@
         </div>
         <div class="summary-box" id="summary"></div>
         <button class="btn btn-blue btn-full" id="btn-copy" onclick="copyCourses()">
-          ✓ &nbsp;Duplicar e atribuir cursos a os membros
+          ✓ &nbsp;Duplicar e atribuir cursos aos membros
         </button>
         <div class="progress-wrap" id="progress-wrap">
           <div class="progress-label" id="progress-label">Processando...</div>
@@ -207,7 +209,7 @@
           <button class="btn btn-outline" onclick="loadRanking()">↻ Atualizar</button>
         </div>
         <p style="font-size:13px;color:var(--muted);margin-bottom:1rem">
-          Média das avaliações dos membros por curso, do melhor ao pior.
+          Média das avaliações dos membros por curso, ordenado do melhor ao pior.
         </p>
         <div id="ranking-body">
           <div class="dash-loading">Clique em "Atualizar" para carregar.</div>
@@ -215,11 +217,25 @@
       </div>
     </div>
 
-    <!-- RH -->
+    <!-- Gestão de Pessoas -->
     <div id="tab-rh" class="section-hidden">
-      <div class="card" style="text-align:center; padding:48px 24px;">
-        <div class="step-title" style="margin-bottom:8px;">Acompanhamento do RH</div>
-        <p style="font-size:13px; color:var(--muted);">Ainda pensando se o Pessoal do Rh gostar da idea dou continuidade</p>
+      <div class="card">
+        <div class="dash-header-row">
+          <div class="step-header" style="margin-bottom:0">
+            <div class="step-num">🧑‍💼</div>
+            <div class="step-title">Acompanhamento de Gestão de Pessoas</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-outline" id="hr-clear-filter" style="display:none" onclick="clearHRFilter()">✕ Mostrar todos</button>
+            <button class="btn btn-outline" onclick="loadHRTracking()">↻ Atualizar</button>
+          </div>
+        </div>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:1rem">
+          Status, metas, conquistas e histórico de 1:1 de cada Estatamigo — visível só pro time de Gestão de Pessoas.
+        </p>
+        <div id="hr-body">
+          <div class="dash-loading">Clique em "Atualizar" para carregar.</div>
+        </div>
       </div>
     </div>
 
@@ -232,6 +248,7 @@
 <script src="back.js"></script>
 <script>
 function showTab(tab) {
+  if (tab === 'rh' && !currentUserIsHR) return; // segunda trava, além do botão escondido
   document.getElementById('tab-copiar').classList.toggle('section-hidden', tab !== 'copiar');
   document.getElementById('tab-dashboard').classList.toggle('section-hidden', tab !== 'dashboard');
   document.getElementById('tab-ranking').classList.toggle('section-hidden', tab !== 'ranking');
@@ -242,6 +259,7 @@ function showTab(tab) {
   });
   if (tab === 'dashboard') loadDashboard();
   if (tab === 'ranking') loadRanking();
+  if (tab === 'rh') loadHRTracking();
 }
 
 function toggleFallback() {
