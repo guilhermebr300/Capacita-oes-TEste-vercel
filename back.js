@@ -258,12 +258,20 @@ async function getHrTaskComments(taskId) {
   }
 }
 
-// Subtarefas de uma tarefa de RH = metas do Estatamigo. O ClickUp só
-// inclui subtasks na listagem se pedirmos `subtasks=true`, mas elas vêm
-// junto com TODAS as tasks da lista (misturadas) — filtramos pelo `parent`
-// bater com o id da tarefa principal.
+// Subtarefas de uma tarefa de RH servem pra DUAS coisas: Metas do
+// Estatamigo, e 1:1s agendados (ver scheduleOneOnOne). As duas são
+// subtarefas da mesma tarefa principal — a diferença é só um prefixo no
+// nome ("1:1:" no início), pra não precisar de mais nenhum campo.
+const ONE_ON_ONE_PREFIX = '1:1:';
+
 function extractGoalsFor(taskId, allHrTasks) {
-  return allHrTasks.filter(t => t.parent === taskId);
+  return allHrTasks.filter(t => t.parent === taskId && !t.name.startsWith(ONE_ON_ONE_PREFIX));
+}
+
+function extractScheduled1on1sFor(taskId, allHrTasks) {
+  return allHrTasks
+    .filter(t => t.parent === taskId && t.name.startsWith(ONE_ON_ONE_PREFIX))
+    .sort((a, b) => Number(a.due_date || 0) - Number(b.due_date || 0));
 }
 
 // ── LOGIN (Google Identity Services) ────────────────────────
@@ -1035,6 +1043,20 @@ function daysAgo(timestampMs) {
   return `há ${days} dias`;
 }
 
+// Badge redondo "Último 1:1", no mesmo estilo do selo de e-mail logado no
+// topo do app. Muda de cor quando passa de 2 meses (60 dias) sem 1:1.
+const STALE_1ON1_DAYS = 60;
+function renderLast1on1Badge(lastCommentMs) {
+  if (!lastCommentMs) {
+    return `<span class="hr-1on1-pill" style="background:#F8D7D7;color:#B23B3B">🗓️ Nunca teve 1:1</span>`;
+  }
+  const days = Math.floor((Date.now() - Number(lastCommentMs)) / 86400000);
+  const isStale = days > STALE_1ON1_DAYS;
+  const bg = isStale ? '#FBE0C7' : '#DCEEFB';
+  const fg = isStale ? '#B2650C' : '#1A7AB8';
+  return `<span class="hr-1on1-pill" style="background:${bg};color:${fg}">🗓️ Último 1:1: ${daysAgo(lastCommentMs)}</span>`;
+}
+
 let hrEnrichedByTaskId = {};   // cache do último load, usado pelos handlers de escrita
 let hrTrackingStatuses = [];   // status configurados na lista Acompanhamento
 let hrClosedStatusName = null; // usado pra marcar uma Meta (subtarefa) como concluída
@@ -1080,13 +1102,14 @@ async function loadHRTracking() {
         getHrTaskComments(t.id)
       ]);
       const goals = extractGoalsFor(t.id, allTasks);
+      const scheduled1on1s = extractScheduled1on1sFor(t.id, allTasks);
       const lastCommentMs = comments.length
         ? Math.max(...comments.map(c => Number(c.date) || 0))
         : null;
       const conquistas = (detail.checklists || []).find(cl =>
         (cl.name || '').toLowerCase().includes('conquist')
       );
-      return { task: t, detail, comments, goals, lastCommentMs, achievementsChecklistId: conquistas?.id || null, achievementsItems: conquistas?.items || [] };
+      return { task: t, detail, comments, goals, scheduled1on1s, lastCommentMs, achievementsChecklistId: conquistas?.id || null, achievementsItems: conquistas?.items || [] };
     }));
 
     enriched.sort((a, b) => a.task.name.localeCompare(b.task.name));
@@ -1111,14 +1134,13 @@ async function loadHRTracking() {
       return;
     }
 
-    html += '<div class="dash-summary-grid">';
+    html += '<div class="hr-summary-grid">';
     for (const item of enriched) {
       const { task, comments, goals, lastCommentMs, achievementsItems } = item;
       const statusColor = task.status?.color || '#5BB8F5';
       const statusName = task.status?.status || 'Sem status';
       const responsavel = (task.assignees && task.assignees[0])
         ? (task.assignees[0].username || task.assignees[0].email) : 'Sem responsável';
-      const ultimoContato = lastCommentMs ? daysAgo(lastCommentMs) : 'sem registro';
       const goalsDone = goals.filter(g => g.status?.type === 'closed').length;
       const achvDone = achievementsItems.filter(it => it.resolved).length;
 
@@ -1128,7 +1150,8 @@ async function loadHRTracking() {
           <div class="dash-card-info">
             <div class="dash-card-name">${task.name}</div>
             <div class="dash-card-meta" style="color:${statusColor}">${statusName}</div>
-            <div class="dash-card-meta">GP: ${responsavel} · Último 1:1: ${ultimoContato}</div>
+            <div class="dash-card-meta">GP: ${responsavel}</div>
+            <div style="margin-top:4px">${renderLast1on1Badge(lastCommentMs)}</div>
             <div class="dash-card-meta">🎯 ${goalsDone}/${goals.length} metas · 🏆 ${achvDone}/${achievementsItems.length} conquistas</div>
           </div>
         </div>`;
@@ -1138,16 +1161,47 @@ async function loadHRTracking() {
     // detalhe por membro — escondido até clicar, mesmo padrão do Dashboard
     let detailHtml = '';
     for (const item of enriched) {
-      const { task, comments, goals, achievementsItems, achievementsChecklistId } = item;
+      const { task, comments, goals, scheduled1on1s, achievementsItems, achievementsChecklistId, lastCommentMs } = item;
 
       const statusOptions = hrTrackingStatuses.map(s =>
         `<option value="${s.status}" ${s.status === task.status?.status ? 'selected' : ''}>${s.status}</option>`
       ).join('');
 
+      const guessedMemberId = guessMemberIdByName(task.name);
+      const memberOptionsFor1on1 = workspaceMembers.map(m =>
+        `<option value="${m.id}" ${m.id === guessedMemberId ? 'selected' : ''}>${m.name}</option>`
+      ).join('');
+
       detailHtml += `<div class="dash-member" data-member-key="${task.id}">
         <div class="dash-member-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-          <strong>${task.name}</strong>
+          <span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <strong>${task.name}</strong>
+            ${renderLast1on1Badge(lastCommentMs)}
+          </span>
           <select class="hr-input" style="width:auto" onchange="changeHRStatus('${task.id}', this.value)">${statusOptions}</select>
+        </div>
+
+        <div class="hr-detail-section">
+          <div class="hr-detail-title">📅 1:1 agendados</div>
+          ${scheduled1on1s.length ? scheduled1on1s.map(s1 => `
+            <div class="dash-course-row">
+              <div class="dash-course-top">
+                <span class="dash-course-name">${s1.name.replace(ONE_ON_ONE_PREFIX, '').trim()}</span>
+                <span class="dash-pct">${new Date(Number(s1.due_date)).toLocaleString('pt-BR', {dateStyle:'short', timeStyle:'short'})}</span>
+              </div>
+            </div>`).join('') : '<div class="dash-empty-member">Nenhum 1:1 agendado ainda.</div>'}
+          <div class="hr-new-form" style="margin-top:8px">
+            <input type="date" id="hr-1on1-date-${task.id}" class="hr-input">
+            <input type="time" id="hr-1on1-time-${task.id}" class="hr-input" value="14:00">
+            <select id="hr-1on1-member-${task.id}" class="hr-input" style="flex:1">
+              <option value="">Conta do Estatamigo no ClickUp...</option>
+              ${memberOptionsFor1on1}
+            </select>
+            <button class="btn btn-blue" onclick="scheduleOneOnOne('${task.id}')">📅 Agendar</button>
+          </div>
+          <p style="font-size:11px;color:var(--muted);margin-top:6px">
+            Cria uma tarefa com data marcada, atribuída a você e ao Estatamigo escolhido — aparece no calendário do ClickUp dos dois.
+          </p>
         </div>
 
         <div class="hr-detail-section">
@@ -1246,6 +1300,55 @@ async function toggleAchievement(checklistId, itemId, wasResolved) {
     await apiPutHR(`/checklist/${checklistId}/checklist_item/${itemId}`, { resolved: !wasResolved });
     await loadHRTracking();
   } catch (e) { alert('Erro ao atualizar conquista: ' + e.message); }
+}
+
+// Tenta achar a conta ClickUp de um Estatamigo comparando o nome da
+// tarefa de acompanhamento com o nome de cada membro do workspace — só
+// serve de sugestão pra pré-selecionar no formulário de agendar 1:1;
+// a pessoa da Gestão de Pessoas sempre pode trocar manualmente.
+function guessMemberIdByName(taskName) {
+  const norm = normalizeStatus(taskName);
+  const exact = workspaceMembers.find(m => normalizeStatus(m.name) === norm);
+  if (exact) return exact.id;
+  const partial = workspaceMembers.find(m => {
+    const mn = normalizeStatus(m.name);
+    return mn.includes(norm) || norm.includes(mn);
+  });
+  return partial ? partial.id : '';
+}
+
+// Cria uma subtarefa com data marcada e DOIS responsáveis (quem da
+// Gestão de Pessoas está agendando + a conta real do Estatamigo
+// escolhido) — é isso que faz o compromisso aparecer automaticamente no
+// calendário do ClickUp dos dois, sem precisar de nenhuma integração
+// externa de calendário.
+async function scheduleOneOnOne(taskId) {
+  const dateInput = document.getElementById(`hr-1on1-date-${taskId}`);
+  const timeInput = document.getElementById(`hr-1on1-time-${taskId}`);
+  const memberSelect = document.getElementById(`hr-1on1-member-${taskId}`);
+
+  if (!dateInput?.value) { alert('Escolha uma data para o 1:1.'); return; }
+  if (!memberSelect?.value) { alert('Escolha a conta do Estatamigo no ClickUp.'); return; }
+
+  const gpId = hrEnrichedByTaskId[taskId]?.task?.assignees?.[0]?.id;
+  if (!gpId) { alert('Essa tarefa ainda não tem um responsável de GP definido — defina o status/responsável antes de agendar.'); return; }
+
+  const dueMs = new Date(`${dateInput.value}T${timeInput.value || '00:00'}`).getTime();
+  if (isNaN(dueMs)) { alert('Data ou horário inválido.'); return; }
+
+  const estatamigoId = memberSelect.value;
+  const estatamigoName = memberSelect.options[memberSelect.selectedIndex].text;
+
+  try {
+    await apiPostHR(`/list/${hrTrackingList.id}/task`, {
+      name: `${ONE_ON_ONE_PREFIX} ${estatamigoName}`,
+      parent: taskId,
+      due_date: dueMs,
+      due_date_time: true,
+      assignees: [parseInt(gpId), parseInt(estatamigoId)]
+    });
+    await loadHRTracking();
+  } catch (e) { alert('Erro ao agendar 1:1: ' + e.message); }
 }
 
 async function addGoal(taskId) {
