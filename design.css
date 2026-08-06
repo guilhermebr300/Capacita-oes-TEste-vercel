@@ -437,27 +437,6 @@ footer span { color: var(--sky-dark); font-weight: 600; }
   margin-bottom: 1.5rem;
 }
 
-/* Igual à de cima, mas usa auto-fit em vez de auto-fill: quando tem
-   poucos cards (ex: só 1-2 Estatamigos), eles esticam pra preencher a
-   largura disponível em vez de ficar pequenos com espaço vazio do lado. */
-.hr-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 12px;
-  margin-bottom: 1.5rem;
-}
-
-.hr-1on1-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
 .dash-member-card {
   background: #fff;
   border: 1.5px solid var(--border);
@@ -487,70 +466,6 @@ footer span { color: var(--sky-dark); font-weight: 600; }
   height: 72px;
   flex-shrink: 0;
 }
-
-/* ── ACOMPANHAMENTO RH ────────────────────────────────── */
-.hr-status-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  box-shadow: 0 0 0 3px rgba(0,0,0,0.04);
-}
-.hr-detail-section {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border);
-}
-.hr-detail-section:first-of-type {
-  margin-top: 0.75rem;
-  padding-top: 0;
-  border-top: none;
-}
-.hr-detail-title {
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--text-sec);
-  margin-bottom: 8px;
-}
-.hr-comment-row {
-  background: var(--sky-light);
-  border-radius: var(--radius);
-  padding: 10px 12px;
-  margin-bottom: 8px;
-}
-.hr-comment-meta {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  margin-bottom: 4px;
-}
-.hr-comment-text {
-  font-size: 13px;
-  color: var(--text-sec);
-  white-space: pre-wrap;
-}
-
-.hr-new-form {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.hr-input {
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font-size: 13px;
-  font-family: inherit;
-  background: #fff;
-  color: var(--text);
-}
-.hr-input:focus {
-  outline: none;
-  border-color: var(--sky);
-  box-shadow: 0 0 0 3px var(--sky-glow);
-}
-
 .dash-ring-pct {
   position: absolute;
   inset: 0;
