@@ -2,7 +2,6 @@ const BASE = '/api/proxy';
 let allCourses = [], memberListId = null;
 let workspaceMembers = [];
 let currentUserEmail = '';
-let currentUserIsHR = false;
 
 // ── EMAIL salvo no navegador ──────────────────────────────
 function loadSavedEmail() {
@@ -17,15 +16,6 @@ function loadSavedEmail() {
 function saveEmail(email) {
   currentUserEmail = email;
   localStorage.setItem('estat_email', email);
-}
-
-// Mostra o botão "RH" só pra quem está atribuído (assignee) em alguma
-// tarefa da lista "Equipe RH" no ClickUp — ver checkHrAccess() em
-// loadWorkspace(). Some por padrão até essa checagem terminar, pra
-// ninguém ver o botão piscar antes de sumir.
-function applyHrVisibility() {
-  const btn = document.getElementById('nav-tab-rh');
-  if (btn) btn.style.display = currentUserIsHR ? '' : 'none';
 }
 
 function logout() {
@@ -140,33 +130,6 @@ async function apiPost(path, body) {
   })));
 }
 
-// O ClickUp usa PUT pra "editar" (mudar status de uma tarefa, marcar item
-// de checklist como feito, etc.) — apiPost sozinho não serve pra isso.
-async function apiPut(path, body) {
-  return scheduleRequest(() => withRetry(() => rawRequest(path, {
-    method: 'PUT',
-    headers: buildHeaders(),
-    body: JSON.stringify(body)
-  })));
-}
-
-// ── CHAMADAS DE DADO DE RH (rota protegida no servidor) ───
-// Qualquer tela que mostre OU EDITE dado de RH (status, 1:1, anotações,
-// metas, conquistas) deve usar essas três funções em vez de
-// apiFetch/apiPost/apiPut normais. O prefixo "/hr" faz o proxy.js
-// confirmar de verdade, no servidor, que quem está pedindo é do time de
-// Gestão de Pessoas — não é só o botão escondido na tela (ver comentário
-// grande em proxy.js sobre isso).
-async function apiFetchHR(path) {
-  return apiFetch('/hr' + path);
-}
-async function apiPostHR(path, body) {
-  return apiPost('/hr' + path, body);
-}
-async function apiPutHR(path, body) {
-  return apiPut('/hr' + path, body);
-}
-
 // ── PAGINAÇÃO COMPLETA ────────────────────────────────────
 // A API do ClickUp devolve no máx. 100 tasks por página. Chamar só
 // page=0 (como antes) perde tasks silenciosamente quando a lista cresce.
@@ -180,21 +143,6 @@ async function apiFetchAllPages(pathPrefix) {
     lastPage = data.last_page === true || tasks.length === 0;
     page++;
     if (page > 50) break; // trava de segurança contra loop infinito
-  }
-  return all;
-}
-
-// Igual à de cima, mas via apiFetchHR (rota protegida) — usada só pra
-// buscar tarefas da lista "Acompanhamento RH".
-async function apiFetchAllPagesHR(pathPrefix) {
-  let page = 0, all = [], lastPage = false;
-  while (!lastPage) {
-    const data = await apiFetchHR(`${pathPrefix}page=${page}`);
-    const tasks = data.tasks || [];
-    all = all.concat(tasks);
-    lastPage = data.last_page === true || tasks.length === 0;
-    page++;
-    if (page > 50) break;
   }
   return all;
 }
@@ -226,52 +174,6 @@ async function getTaskDetailCached(task) {
     // se a busca falhar, devolve o cache antigo (se existir) em vez de quebrar a tela
     return cached ? cached.data : task;
   }
-}
-
-// Cache separado pra tarefas de RH (checklist de conquistas), via rota
-// protegida. Fica num objeto à parte pra nunca misturar com o cache de
-// cursos por engano.
-const hrTaskDetailCache = {};
-
-async function getHrTaskDetailCached(task) {
-  const cached = hrTaskDetailCache[task.id];
-  if (cached && cached.date_updated === task.date_updated) return cached.data;
-  try {
-    const data = await apiFetchHR(`/task/${task.id}`);
-    hrTaskDetailCache[task.id] = { date_updated: task.date_updated, data };
-    return data;
-  } catch (e) {
-    return cached ? cached.data : task;
-  }
-}
-
-// Comentários de uma tarefa de RH = histórico de 1:1 e anotações. Não tem
-// cache aqui de propósito — é justamente o dado que muda com mais
-// frequência (RH escreve um novo a cada conversa), então sempre busca
-// fresco.
-async function getHrTaskComments(taskId) {
-  try {
-    const data = await apiFetchHR(`/task/${taskId}/comment`);
-    return data.comments || [];
-  } catch (e) {
-    return [];
-  }
-}
-
-// Subtarefas de uma tarefa de RH servem pra DUAS coisas: Metas do
-// Estatamigo, e 1:1s agendados (ver scheduleOneOnOne). As duas são
-// subtarefas da mesma tarefa principal — a diferença é só um prefixo no
-// nome ("1:1:" no início), pra não precisar de mais nenhum campo.
-const ONE_ON_ONE_PREFIX = '1:1:';
-
-function extractGoalsFor(taskId, allHrTasks) {
-  return allHrTasks.filter(t => t.parent === taskId && !t.name.startsWith(ONE_ON_ONE_PREFIX));
-}
-
-function extractScheduled1on1sFor(taskId, allHrTasks) {
-  return allHrTasks
-    .filter(t => t.parent === taskId && t.name.startsWith(ONE_ON_ONE_PREFIX))
-    .sort((a, b) => Number(a.due_date || 0) - Number(b.due_date || 0));
 }
 
 // ── LOGIN (Google Identity Services) ────────────────────────
@@ -348,8 +250,6 @@ async function connectWithManualKey() {
 let courseAreaLists = []; // [{id, name}] — cada lista = uma área de cursos
 let memberListFound = null;
 let trilhaSpaceName = '';
-let hrTeamList = null;      // lista "Equipe RH" — controle de acesso ao botão de RH
-let hrTrackingList = null;  // lista "Acompanhamento RH" — 1 tarefa por Estatamigo
 
 async function loadWorkspace() {
   ['section-lists','section-courses','section-members','section-action']
@@ -383,45 +283,24 @@ async function loadWorkspace() {
 
   courseAreaLists = [];
   memberListFound = null;
-  hrTeamList = null;
-  hrTrackingList = null;
-
-  // Reconhece uma lista de Gestão de Pessoas de dois jeitos:
-  //  1) o NOME DA LISTA já tem "equipe"/"acompanh" + "gestão" + "pessoa"
-  //     tudo junto (funciona pra listas soltas na raiz do Espaço); ou
-  //  2) a lista está dentro de uma PASTA cujo nome já é "gestão de
-  //     pessoas" — nesse caso o nome da lista só precisa ter "equipe" ou
-  //     "acompanh", sem repetir "gestão de pessoas" de novo (é assim que
-  //     faz mais sentido organizar no ClickUp: pasta com o nome completo,
-  //     listas dentro com nome curto).
-  function classifyList(l, insideGPFolder) {
-    const n = normalizeStatus(l.name);
-    if (n.includes('membro')) { memberListFound = l; return; }
-
-    const isTeamByFullName = n.includes('equipe') && n.includes('gest') && n.includes('pessoa');
-    const isTrackingByFullName = n.includes('acompanh') && n.includes('gest') && n.includes('pessoa');
-    const isTeamByFolder = insideGPFolder && n.includes('equipe');
-    const isTrackingByFolder = insideGPFolder && n.includes('acompanh');
-
-    if (isTeamByFullName || isTeamByFolder) { hrTeamList = l; return; }
-    if (isTrackingByFullName || isTrackingByFolder) { hrTrackingList = l; return; }
-
-    courseAreaLists.push({ id: l.id, name: l.name });
-  }
 
   // listas direto no espaço (sem folder) — ex: Membros, Por área, Por soluções
   const rootListsData = await apiFetch(`/space/${trilhaSpace.id}/list?archived=false`);
-  for (const l of (rootListsData.lists || [])) classifyList(l, false);
+  for (const l of (rootListsData.lists || [])) {
+    const n = l.name.toLowerCase();
+    if (n.includes('membro')) memberListFound = l;
+    else courseAreaLists.push({ id: l.id, name: l.name });
+  }
 
-  // listas dentro de folders do espaço (ex: pasta "Gestão de pessoas" com
-  // "Equipe de Gestão" + "Acompanhamento" dentro, e outras pastas com
-  // listas de curso)
+  // listas dentro de folders do espaço (caso existam subfolders)
   const foldersData = await apiFetch(`/space/${trilhaSpace.id}/folder?archived=false`);
   for (const fo of (foldersData.folders || [])) {
-    const folderName = normalizeStatus(fo.name);
-    const insideGPFolder = folderName.includes('gest') && folderName.includes('pessoa');
     const flData = await apiFetch(`/folder/${fo.id}/list?archived=false`);
-    for (const l of (flData.lists || [])) classifyList(l, insideGPFolder);
+    for (const l of (flData.lists || [])) {
+      const n = l.name.toLowerCase();
+      if (n.includes('membro')) memberListFound = l;
+      else courseAreaLists.push({ id: l.id, name: l.name });
+    }
   }
 
   if (!memberListFound) throw new Error('Lista "Membros" não encontrada no espaço da Trilha.');
@@ -439,8 +318,6 @@ async function loadWorkspace() {
         <span style="color:var(--muted)">${courseAreaLists.length} lista(s) de cursos</span>
         <span style="color:var(--muted)">·</span>
         <span style="color:var(--muted)">Membros: <strong style="color:var(--text-sec)">${memberListFound.name}</strong></span>
-        ${hrTeamList ? `<span style="color:var(--muted)">·</span><span style="color:var(--muted)">Equipe Gestão de Pessoas: <strong style="color:var(--text-sec)">${hrTeamList.name}</strong></span>` : ''}
-        ${hrTrackingList ? `<span style="color:var(--muted)">·</span><span style="color:var(--muted)">Acompanhamento Gestão de Pessoas: <strong style="color:var(--text-sec)">${hrTrackingList.name}</strong></span>` : ''}
       </span>`;
   }
   document.getElementById('section-lists').classList.remove('section-hidden');
@@ -451,39 +328,6 @@ async function loadWorkspace() {
   await resolveCreationStatus();
   await loadMembers();
   await loadCoursesByArea();
-  await checkHrAccess();
-}
-
-// ── ACESSO À ABA DE RH ─────────────────────────────────────
-// Em vez de uma lista fixa de emails (que precisaria ser atualizada toda
-// vez que o time de RH muda, ano após ano), a permissão é lida direto do
-// ClickUp: quem estiver como responsável (assignee) em qualquer tarefa
-// da lista "Equipe RH" (detectada acima, ver hrTeamList) tem acesso.
-// Pra trocar quem é do RH, basta trocar os responsáveis dessa lista no
-// próprio ClickUp — nada de código ou configuração externa.
-//
-// Isso só controla o BOTÃO (cosmético). A proteção de verdade dos dados
-// de RH acontece no servidor — ver apiFetchHR/apiPostHR e o proxy.js.
-async function checkHrAccess() {
-  currentUserIsHR = false;
-  try {
-    if (!hrTeamList) { applyHrVisibility(); return; }
-
-    const me = workspaceMembers.find(
-      m => m.email && m.email.toLowerCase() === currentUserEmail.toLowerCase()
-    );
-    if (!me) { applyHrVisibility(); return; }
-
-    const tasks = await apiFetchAllPages(`/list/${hrTeamList.id}/task?archived=false&`);
-    const isAssignedSomewhere = tasks.some(t =>
-      (t.assignees || []).some(a => String(a.id) === me.id)
-    );
-    currentUserIsHR = isAssignedSomewhere;
-  } catch (e) {
-    // falha na checagem = mais seguro esconder do que mostrar
-    currentUserIsHR = false;
-  }
-  applyHrVisibility();
 }
 
 // ── STATUS REAL PARA NOVAS TAREFAS ────────────────────────
@@ -1017,397 +861,4 @@ function renderStars(media) {
   const half  = (media - full) >= 0.5 ? 1 : 0;
   const empty = 5 - full - half;
   return '★'.repeat(full) + (half ? '⯨' : '') + '☆'.repeat(empty);
-}
-
-// ── ACOMPANHAMENTO GESTÃO DE PESSOAS (dado sensível — só via apiFetchHR/apiPostHR/apiPutHR) ──
-// Espelha a estrutura do Dashboard de cursos, mas lendo (E ESCREVENDO) na
-// lista "Acompanhamento". Cada Estatamigo é UMA tarefa nessa lista, e
-// cada informação vem de um mecanismo nativo do ClickUp (sem gastar
-// Custom Field):
-//   • Status do membro    → o Status da própria tarefa (cor já vem do ClickUp)
-//   • Responsável de GP   → o assignee da tarefa
-//   • Último 1:1/anotações → os Comentários da tarefa (data automática)
-//   • Conquistas           → uma Checklist chamada "Conquistas"
-//   • Metas                 → Subtarefas (cada uma = 1 meta, com prazo)
-//
-// Toda ação de escrita (mudar status, marcar conquista, criar meta,
-// registrar comentário, criar Estatamigo novo) chama o ClickUp de
-// verdade via apiPostHR/apiPutHR e depois recarrega a tela inteira — é
-// mais simples e mais seguro contra estado desatualizado do que tentar
-// atualizar só um pedaço da tela na mão.
-function daysAgo(timestampMs) {
-  const diffMs = Date.now() - Number(timestampMs);
-  const days = Math.floor(diffMs / 86400000);
-  if (days <= 0) return 'hoje';
-  if (days === 1) return 'há 1 dia';
-  return `há ${days} dias`;
-}
-
-// Badge redondo "Último 1:1", no mesmo estilo do selo de e-mail logado no
-// topo do app. Muda de cor quando passa de 2 meses (60 dias) sem 1:1.
-const STALE_1ON1_DAYS = 60;
-function renderLast1on1Badge(lastCommentMs) {
-  if (!lastCommentMs) {
-    return `<span class="hr-1on1-pill" style="background:#F8D7D7;color:#B23B3B">🗓️ Nunca teve 1:1</span>`;
-  }
-  const days = Math.floor((Date.now() - Number(lastCommentMs)) / 86400000);
-  const isStale = days > STALE_1ON1_DAYS;
-  const bg = isStale ? '#FBE0C7' : '#DCEEFB';
-  const fg = isStale ? '#B2650C' : '#1A7AB8';
-  return `<span class="hr-1on1-pill" style="background:${bg};color:${fg}">🗓️ Último 1:1: ${daysAgo(lastCommentMs)}</span>`;
-}
-
-let hrEnrichedByTaskId = {};   // cache do último load, usado pelos handlers de escrita
-let hrTrackingStatuses = [];   // status configurados na lista Acompanhamento
-let hrClosedStatusName = null; // usado pra marcar uma Meta (subtarefa) como concluída
-let hrOpenStatusName = null;   // usado pra "desmarcar" uma Meta
-
-async function loadHRTracking() {
-  const body = document.getElementById('hr-body');
-  if (!body) return;
-
-  if (!currentUserIsHR) {
-    body.innerHTML = '<div class="empty">Acesso restrito ao time de Gestão de Pessoas.</div>';
-    return;
-  }
-  if (!hrTrackingList) {
-    body.innerHTML = `<div class="msg show warn">
-      Lista "Acompanhamento" (dentro da pasta "Gestão de pessoas") ainda não
-      encontrada. Crie a lista e adicione uma tarefa por Estatamigo.
-    </div>`;
-    return;
-  }
-
-  body.innerHTML = '<div class="dash-loading">⏳ Carregando acompanhamento...</div>';
-
-  try {
-    // status configurados na lista (pro dropdown de status + achar qual é "concluído")
-    const listData = await apiFetchHR(`/list/${hrTrackingList.id}`);
-    hrTrackingStatuses = listData.statuses || [];
-    const closed = hrTrackingStatuses.find(s => s.type === 'closed');
-    const open = hrTrackingStatuses.find(s => s.type !== 'closed');
-    hrClosedStatusName = closed ? closed.status : null;
-    hrOpenStatusName = open ? open.status : null;
-
-    // subtasks=true traz as metas (subtarefas) junto na mesma busca
-    const allTasks = await apiFetchAllPagesHR(
-      `/list/${hrTrackingList.id}/task?archived=false&subtasks=true&include_closed=true&`
-    );
-    const memberTasks = allTasks.filter(t => !t.parent);
-
-    // busca checklist (conquistas) e comentários (1:1/anotações) de cada um
-    const enriched = await Promise.all(memberTasks.map(async t => {
-      const [detail, comments] = await Promise.all([
-        getHrTaskDetailCached(t),
-        getHrTaskComments(t.id)
-      ]);
-      const goals = extractGoalsFor(t.id, allTasks);
-      const scheduled1on1s = extractScheduled1on1sFor(t.id, allTasks);
-      const lastCommentMs = comments.length
-        ? Math.max(...comments.map(c => Number(c.date) || 0))
-        : null;
-      const conquistas = (detail.checklists || []).find(cl =>
-        (cl.name || '').toLowerCase().includes('conquist')
-      );
-      return { task: t, detail, comments, goals, scheduled1on1s, lastCommentMs, achievementsChecklistId: conquistas?.id || null, achievementsItems: conquistas?.items || [] };
-    }));
-
-    enriched.sort((a, b) => a.task.name.localeCompare(b.task.name));
-    hrEnrichedByTaskId = {};
-    for (const item of enriched) hrEnrichedByTaskId[item.task.id] = item;
-
-    // ── formulário "novo Estatamigo" ──────────────────────
-    const memberOptions = workspaceMembers.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
-    let html = `
-      <div class="hr-new-form">
-        <input type="text" id="hr-new-name" placeholder="Nome do Estatamigo" class="hr-input" style="flex:2">
-        <select id="hr-new-resp" class="hr-input" style="flex:1">
-          <option value="">Responsável de GP...</option>
-          ${memberOptions}
-        </select>
-        <button class="btn btn-blue" onclick="addEstatamigo()">+ Adicionar</button>
-      </div>`;
-
-    if (!enriched.length) {
-      html += '<div class="empty">Nenhum Estatamigo cadastrado ainda.</div>';
-      body.innerHTML = html;
-      return;
-    }
-
-    html += '<div class="hr-summary-grid">';
-    for (const item of enriched) {
-      const { task, comments, goals, lastCommentMs, achievementsItems } = item;
-      const statusColor = task.status?.color || '#5BB8F5';
-      const statusName = task.status?.status || 'Sem status';
-      const responsavel = (task.assignees && task.assignees[0])
-        ? (task.assignees[0].username || task.assignees[0].email) : 'Sem responsável';
-      const goalsDone = goals.filter(g => g.status?.type === 'closed').length;
-      const achvDone = achievementsItems.filter(it => it.resolved).length;
-
-      html += `
-        <div class="dash-member-card" data-member-key="${task.id}" onclick="filterHRMember('${task.id}')" title="Clique para ver o histórico de ${task.name}">
-          <div class="hr-status-dot" style="background:${statusColor}"></div>
-          <div class="dash-card-info">
-            <div class="dash-card-name">${task.name}</div>
-            <div class="dash-card-meta" style="color:${statusColor}">${statusName}</div>
-            <div class="dash-card-meta">GP: ${responsavel}</div>
-            <div style="margin-top:4px">${renderLast1on1Badge(lastCommentMs)}</div>
-            <div class="dash-card-meta">🎯 ${goalsDone}/${goals.length} metas · 🏆 ${achvDone}/${achievementsItems.length} conquistas</div>
-          </div>
-        </div>`;
-    }
-    html += '</div>';
-
-    // detalhe por membro — escondido até clicar, mesmo padrão do Dashboard
-    let detailHtml = '';
-    for (const item of enriched) {
-      const { task, comments, goals, scheduled1on1s, achievementsItems, achievementsChecklistId, lastCommentMs } = item;
-
-      const statusOptions = hrTrackingStatuses.map(s =>
-        `<option value="${s.status}" ${s.status === task.status?.status ? 'selected' : ''}>${s.status}</option>`
-      ).join('');
-
-      const guessedMemberId = guessMemberIdByName(task.name);
-      const memberOptionsFor1on1 = workspaceMembers.map(m =>
-        `<option value="${m.id}" ${m.id === guessedMemberId ? 'selected' : ''}>${m.name}</option>`
-      ).join('');
-
-      detailHtml += `<div class="dash-member" data-member-key="${task.id}">
-        <div class="dash-member-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-          <span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <strong>${task.name}</strong>
-            ${renderLast1on1Badge(lastCommentMs)}
-          </span>
-          <select class="hr-input" style="width:auto" onchange="changeHRStatus('${task.id}', this.value)">${statusOptions}</select>
-        </div>
-
-        <div class="hr-detail-section">
-          <div class="hr-detail-title">📅 1:1 agendados</div>
-          ${scheduled1on1s.length ? scheduled1on1s.map(s1 => `
-            <div class="dash-course-row">
-              <div class="dash-course-top">
-                <span class="dash-course-name">${s1.name.replace(ONE_ON_ONE_PREFIX, '').trim()}</span>
-                <span class="dash-pct">${new Date(Number(s1.due_date)).toLocaleString('pt-BR', {dateStyle:'short', timeStyle:'short'})}</span>
-              </div>
-            </div>`).join('') : '<div class="dash-empty-member">Nenhum 1:1 agendado ainda.</div>'}
-          <div class="hr-new-form" style="margin-top:8px">
-            <input type="date" id="hr-1on1-date-${task.id}" class="hr-input">
-            <input type="time" id="hr-1on1-time-${task.id}" class="hr-input" value="14:00">
-            <select id="hr-1on1-member-${task.id}" class="hr-input" style="flex:1">
-              <option value="">Conta do Estatamigo no ClickUp...</option>
-              ${memberOptionsFor1on1}
-            </select>
-            <button class="btn btn-blue" onclick="scheduleOneOnOne('${task.id}')">📅 Agendar</button>
-          </div>
-          <p style="font-size:11px;color:var(--muted);margin-top:6px">
-            Cria uma tarefa com data marcada, atribuída a você e ao Estatamigo escolhido — aparece no calendário do ClickUp dos dois.
-          </p>
-        </div>
-
-        <div class="hr-detail-section">
-          <div class="hr-detail-title">🎯 Metas</div>
-          ${goals.map(g => `
-            <div class="dash-course-row" style="cursor:pointer" onclick="toggleGoal('${g.id}', ${g.status?.type === 'closed'})">
-              <div class="dash-course-top">
-                <span class="dash-course-name ${g.status?.type==='closed'?'done-text':''}">
-                  ${g.status?.type==='closed'?'✓ ':'☐ '}${g.name}
-                </span>
-                ${g.due_date ? `<span class="dash-pct">até ${new Date(Number(g.due_date)).toLocaleDateString('pt-BR')}</span>` : ''}
-              </div>
-            </div>`).join('') || '<div class="dash-empty-member">Nenhuma meta cadastrada.</div>'}
-          <div class="hr-new-form" style="margin-top:8px">
-            <input type="text" id="hr-new-goal-${task.id}" placeholder="Nova meta..." class="hr-input" style="flex:2">
-            <input type="date" id="hr-new-goal-date-${task.id}" class="hr-input" style="flex:1">
-            <button class="btn btn-outline" onclick="addGoal('${task.id}')">+ Meta</button>
-          </div>
-        </div>
-
-        <div class="hr-detail-section">
-          <div class="hr-detail-title">🏆 Conquistas</div>
-          ${achievementsItems.map(it => `
-            <div class="dash-course-row" style="cursor:pointer" onclick="toggleAchievement('${achievementsChecklistId}','${it.id}', ${!!it.resolved})">
-              <span class="dash-course-name ${it.resolved?'done-text':''}">${it.resolved?'✓ ':'☐ '}${it.name}</span>
-            </div>`).join('') || '<div class="dash-empty-member">Nenhuma conquista registrada ainda.</div>'}
-          <div class="hr-new-form" style="margin-top:8px">
-            <input type="text" id="hr-new-achv-${task.id}" placeholder="Nova conquista..." class="hr-input" style="flex:2">
-            <button class="btn btn-outline" onclick="addAchievement('${task.id}')">+ Conquista</button>
-          </div>
-        </div>
-
-        <div class="hr-detail-section">
-          <div class="hr-detail-title">📝 Histórico (1:1 e anotações)</div>
-          ${comments.slice().sort((a,b)=>Number(b.date)-Number(a.date)).map(c => `
-            <div class="hr-comment-row">
-              <div class="hr-comment-meta">
-                <strong>${c.user?.username || 'Gestão de Pessoas'}</strong>
-                <span style="color:var(--muted)">${new Date(Number(c.date)).toLocaleDateString('pt-BR')}</span>
-              </div>
-              <div class="hr-comment-text">${c.comment_text || ''}</div>
-            </div>`).join('') || '<div class="dash-empty-member">Nenhuma anotação registrada ainda.</div>'}
-          <div class="hr-new-form" style="margin-top:8px">
-            <textarea id="hr-new-comment-${task.id}" placeholder="Escreva uma anotação de 1:1..." class="hr-input" style="flex:1;min-height:60px"></textarea>
-          </div>
-          <button class="btn btn-blue" style="margin-top:6px" onclick="addHRComment('${task.id}')">Registrar 1:1</button>
-        </div>
-      </div>`;
-    }
-
-    body.innerHTML = html + `<div id="hr-detail-wrap" style="margin-top:1.5rem;display:none">${detailHtml}</div>`;
-    applyHRFilter();
-  } catch (e) {
-    body.innerHTML = `<div class="msg show error">Erro ao carregar acompanhamento: ${e.message}</div>`;
-  }
-}
-
-// ── AÇÕES DE ESCRITA (tudo via rota protegida hr/) ────────
-async function addEstatamigo() {
-  const nameInput = document.getElementById('hr-new-name');
-  const respSelect = document.getElementById('hr-new-resp');
-  const name = nameInput.value.trim();
-  if (!name) { alert('Digite o nome do Estatamigo.'); return; }
-  const body = { name };
-  if (respSelect.value) body.assignees = [parseInt(respSelect.value)];
-  try {
-    await apiPostHR(`/list/${hrTrackingList.id}/task`, body);
-    await loadHRTracking();
-  } catch (e) { alert('Erro ao criar Estatamigo: ' + e.message); }
-}
-
-async function changeHRStatus(taskId, statusName) {
-  try {
-    await apiPutHR(`/task/${taskId}`, { status: statusName });
-    await loadHRTracking();
-  } catch (e) { alert('Erro ao mudar status: ' + e.message); }
-}
-
-async function addAchievement(taskId) {
-  const input = document.getElementById(`hr-new-achv-${taskId}`);
-  const text = input.value.trim();
-  if (!text) return;
-  try {
-    let checklistId = hrEnrichedByTaskId[taskId]?.achievementsChecklistId;
-    if (!checklistId) {
-      const cl = await apiPostHR(`/task/${taskId}/checklist`, { name: 'Conquistas' });
-      checklistId = cl.checklist?.id;
-    }
-    await apiPostHR(`/checklist/${checklistId}/checklist_item`, { name: text });
-    await loadHRTracking();
-  } catch (e) { alert('Erro ao adicionar conquista: ' + e.message); }
-}
-
-async function toggleAchievement(checklistId, itemId, wasResolved) {
-  try {
-    await apiPutHR(`/checklist/${checklistId}/checklist_item/${itemId}`, { resolved: !wasResolved });
-    await loadHRTracking();
-  } catch (e) { alert('Erro ao atualizar conquista: ' + e.message); }
-}
-
-// Tenta achar a conta ClickUp de um Estatamigo comparando o nome da
-// tarefa de acompanhamento com o nome de cada membro do workspace — só
-// serve de sugestão pra pré-selecionar no formulário de agendar 1:1;
-// a pessoa da Gestão de Pessoas sempre pode trocar manualmente.
-function guessMemberIdByName(taskName) {
-  const norm = normalizeStatus(taskName);
-  const exact = workspaceMembers.find(m => normalizeStatus(m.name) === norm);
-  if (exact) return exact.id;
-  const partial = workspaceMembers.find(m => {
-    const mn = normalizeStatus(m.name);
-    return mn.includes(norm) || norm.includes(mn);
-  });
-  return partial ? partial.id : '';
-}
-
-// Cria uma subtarefa com data marcada e DOIS responsáveis (quem da
-// Gestão de Pessoas está agendando + a conta real do Estatamigo
-// escolhido) — é isso que faz o compromisso aparecer automaticamente no
-// calendário do ClickUp dos dois, sem precisar de nenhuma integração
-// externa de calendário.
-async function scheduleOneOnOne(taskId) {
-  const dateInput = document.getElementById(`hr-1on1-date-${taskId}`);
-  const timeInput = document.getElementById(`hr-1on1-time-${taskId}`);
-  const memberSelect = document.getElementById(`hr-1on1-member-${taskId}`);
-
-  if (!dateInput?.value) { alert('Escolha uma data para o 1:1.'); return; }
-  if (!memberSelect?.value) { alert('Escolha a conta do Estatamigo no ClickUp.'); return; }
-
-  const gpId = hrEnrichedByTaskId[taskId]?.task?.assignees?.[0]?.id;
-  if (!gpId) { alert('Essa tarefa ainda não tem um responsável de GP definido — defina o status/responsável antes de agendar.'); return; }
-
-  const dueMs = new Date(`${dateInput.value}T${timeInput.value || '00:00'}`).getTime();
-  if (isNaN(dueMs)) { alert('Data ou horário inválido.'); return; }
-
-  const estatamigoId = memberSelect.value;
-  const estatamigoName = memberSelect.options[memberSelect.selectedIndex].text;
-
-  try {
-    await apiPostHR(`/list/${hrTrackingList.id}/task`, {
-      name: `${ONE_ON_ONE_PREFIX} ${estatamigoName}`,
-      parent: taskId,
-      due_date: dueMs,
-      due_date_time: true,
-      assignees: [parseInt(gpId), parseInt(estatamigoId)]
-    });
-    await loadHRTracking();
-  } catch (e) { alert('Erro ao agendar 1:1: ' + e.message); }
-}
-
-async function addGoal(taskId) {
-  const nameInput = document.getElementById(`hr-new-goal-${taskId}`);
-  const dateInput = document.getElementById(`hr-new-goal-date-${taskId}`);
-  const name = nameInput.value.trim();
-  if (!name) return;
-  const body = { name, parent: taskId };
-  if (dateInput?.value) body.due_date = new Date(dateInput.value).getTime();
-  try {
-    await apiPostHR(`/list/${hrTrackingList.id}/task`, body);
-    await loadHRTracking();
-  } catch (e) { alert('Erro ao adicionar meta: ' + e.message); }
-}
-
-async function toggleGoal(goalId, isCurrentlyClosed) {
-  const targetStatus = isCurrentlyClosed ? hrOpenStatusName : hrClosedStatusName;
-  if (!targetStatus) { alert('Nenhum status de conclusão configurado na lista Acompanhamento.'); return; }
-  try {
-    await apiPutHR(`/task/${goalId}`, { status: targetStatus });
-    await loadHRTracking();
-  } catch (e) { alert('Erro ao atualizar meta: ' + e.message); }
-}
-
-async function addHRComment(taskId) {
-  const textarea = document.getElementById(`hr-new-comment-${taskId}`);
-  const text = textarea.value.trim();
-  if (!text) return;
-  try {
-    await apiPostHR(`/task/${taskId}/comment`, { comment_text: text });
-    await loadHRTracking();
-  } catch (e) { alert('Erro ao registrar anotação: ' + e.message); }
-}
-
-// ── FILTRO "SÓ ESSE ESTATAMIGO" (mesmo padrão do Dashboard de cursos) ──
-let hrFilterKey = null;
-
-function filterHRMember(key) {
-  hrFilterKey = (hrFilterKey === key) ? null : key;
-  applyHRFilter();
-}
-
-function clearHRFilter() {
-  hrFilterKey = null;
-  applyHRFilter();
-}
-
-function applyHRFilter() {
-  const clearBtn = document.getElementById('hr-clear-filter');
-  if (clearBtn) clearBtn.style.display = hrFilterKey ? '' : 'none';
-
-  document.querySelectorAll('#hr-body .dash-member-card').forEach(card => {
-    const isMatch = card.dataset.memberKey === hrFilterKey;
-    card.classList.toggle('dash-card-active', isMatch);
-    card.style.display = (!hrFilterKey || isMatch) ? '' : 'none';
-  });
-  const detailWrap = document.getElementById('hr-detail-wrap');
-  if (detailWrap) detailWrap.style.display = hrFilterKey ? '' : 'none';
-  document.querySelectorAll('#hr-body .dash-member').forEach(det => {
-    det.style.display = (det.dataset.memberKey === hrFilterKey) ? '' : 'none';
-  });
 }
