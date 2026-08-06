@@ -437,6 +437,27 @@ footer span { color: var(--sky-dark); font-weight: 600; }
   margin-bottom: 1.5rem;
 }
 
+/* Igual à de cima, mas usa auto-fit em vez de auto-fill: quando tem
+   poucos cards (ex: só 1-2 Estatamigos), eles esticam pra preencher a
+   largura disponível em vez de ficar pequenos com espaço vazio do lado. */
+.hr-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  margin-bottom: 1.5rem;
+}
+
+.hr-1on1-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .dash-member-card {
   background: #fff;
   border: 1.5px solid var(--border);
