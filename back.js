@@ -133,7 +133,7 @@ async function apiPost(path, body) {
 // ── PAGINAÇÃO COMPLETA ────────────────────────────────────
 // A API do ClickUp devolve no máx. 100 tasks por página. Chamar só
 // page=0 (como antes) perde tasks silenciosamente quando a lista cresce.
-// `pathPrefix` deve terminar em '?' ou '&' — a função completa com page=N.
+// `pathPrefix` deve terminar em '?' ou '&', a função completa com page=N.
 async function apiFetchAllPages(pathPrefix) {
   let page = 0, all = [], lastPage = false;
   while (!lastPage) {
@@ -153,18 +153,18 @@ async function apiFetchAllPages(pathPrefix) {
 // consumidor de requisições do app: N tasks = N chamadas GET /task/:id
 // repetidas mesmo quando nada mudou desde a última vez.
 // Solução: cache em memória (dura enquanto a página está aberta, some
-// no F5 — não usamos localStorage aqui pra não guardar dado de curso
+// no F5, não usamos localStorage aqui pra não guardar dado de curso
 // desatualizado entre sessões) chaveado por task.id, guardando também o
 // `date_updated` que o próprio ClickUp devolve na listagem. Se o
 // date_updated não mudou, a task não foi editada no ClickUp desde a
-// última busca — então reaproveitamos o detalhe já salvo em vez de
+// última busca, então reaproveitamos o detalhe já salvo em vez de
 // gastar mais uma chamada de API.
 const taskDetailCache = {}; // { [taskId]: { date_updated, data } }
 
 async function getTaskDetailCached(task) {
   const cached = taskDetailCache[task.id];
   if (cached && cached.date_updated === task.date_updated) {
-    return cached.data; // nada mudou no ClickUp desde a última vez — usa o cache
+    return cached.data; // nada mudou no ClickUp desde a última vez, usa o cache
   }
   try {
     const data = await apiFetch(`/task/${task.id}`);
@@ -179,7 +179,7 @@ async function getTaskDetailCached(task) {
 // ── LOGIN (Google Identity Services) ────────────────────────
 // Chamada automaticamente pelo botão do Google (ver data-callback
 // no index.html) assim que a pessoa termina de logar na conta Google.
-// response.credential é um JWT assinado pelo Google — nós NÃO confiamos
+// response.credential é um JWT assinado pelo Google. Nós NÃO confiamos
 // nele aqui no navegador (poderia ser forjado), só repassamos pro
 // proxy.js, que confirma a autenticidade direto com o Google antes
 // de liberar o acesso (ver seção "google-login" no proxy).
@@ -247,13 +247,42 @@ async function connectWithManualKey() {
 }
 
 // ── WORKSPACE ─────────────────────────────────────────────
-let courseAreaLists = []; // [{id, name}] — cada lista = uma área de cursos
+// IDs FIXOS DAS LISTAS ─────────────────────────────────────
+// O Space "Trilha de Capacitações" é privado no ClickUp. Convidados/membros
+// com acesso liberado só nas listas (não no Space inteiro) não conseguem
+// listar Spaces via API (/team/{id}/space não retorna Spaces privados pra
+// quem não foi adicionado neles), por isso a descoberta automática do
+// Space quebrava com "Espaço não encontrado" mesmo a pessoa tendo acesso
+// de verdade às listas de dentro dele.
+// Solução: pular a descoberta do Space e ir direto nas listas por ID fixo.
+// Isso funciona porque acesso de lista é independente de acesso ao Space.
+//
+// COMO PEGAR O ID DE UMA LISTA NO CLICKUP:
+//   1. Abra a lista no ClickUp
+//   2. Clique nos "..." ao lado do nome da lista → Copy link
+//   3. O link é tipo https://app.clickup.com/9012345/v/li/901234567890
+//      → o número final (901234567890) é o ID
+//
+// PREENCHER AQUI 👇 (troque os placeholders pelos IDs reais)
+const MEMBER_LIST_ID = 'COLOQUE_AQUI_O_ID_DA_LISTA_MEMBROS';
+
+const COURSE_LIST_IDS = [
+  // { id: 'COLOQUE_AQUI_O_ID', name: 'Por área' },
+  // { id: 'COLOQUE_AQUI_O_ID', name: 'Por soluções' },
+];
+
+let courseAreaLists = []; // [{id, name}], cada lista é uma área de cursos
 let memberListFound = null;
-let trilhaSpaceName = '';
+let trilhaSpaceName = 'Trilha de Capacitações';
 
 async function loadWorkspace() {
   ['section-lists','section-courses','section-members','section-action']
     .forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('section-hidden'); });
+
+  if (!MEMBER_LIST_ID || MEMBER_LIST_ID.startsWith('COLOQUE_AQUI'))
+    throw new Error('MEMBER_LIST_ID ainda não foi preenchido no código (back.js).');
+  if (!COURSE_LIST_IDS.length)
+    throw new Error('COURSE_LIST_IDS ainda não foi preenchido no código (back.js).');
 
   const teams = await apiFetch('/team');
   if (!teams.teams?.length) throw new Error('Nenhum workspace encontrado.');
@@ -269,51 +298,24 @@ async function loadWorkspace() {
     }));
   } catch(e) { workspaceMembers = []; }
 
-  // procura o ESPAÇO "Trilha de Capacitações"
-  const spaces = await apiFetch(`/team/${teamId}/space?archived=false`);
-  let trilhaSpace = null;
-  for (const sp of spaces.spaces) {
-    if (sp.name.toLowerCase().includes('trilha') || sp.name.toLowerCase().includes('capacita')) {
-      trilhaSpace = sp;
-      break;
-    }
-  }
-  if (!trilhaSpace) throw new Error('Espaço "Trilha de Capacitações" não encontrado. Verifique o nome no ClickUp.');
-  trilhaSpaceName = trilhaSpace.name;
+  // busca a lista de Membros direto pelo ID (sem passar pelo Space)
+  const memberList = await apiFetch(`/list/${MEMBER_LIST_ID}`);
+  memberListFound = { id: memberList.id, name: memberList.name };
+  memberListId = memberList.id;
 
+  // busca cada lista de curso direto pelo ID (sem passar pelo Space)
   courseAreaLists = [];
-  memberListFound = null;
-
-  // listas direto no espaço (sem folder) — ex: Membros, Por área, Por soluções
-  const rootListsData = await apiFetch(`/space/${trilhaSpace.id}/list?archived=false`);
-  for (const l of (rootListsData.lists || [])) {
-    const n = l.name.toLowerCase();
-    if (n.includes('membro')) memberListFound = l;
-    else courseAreaLists.push({ id: l.id, name: l.name });
+  for (const cfg of COURSE_LIST_IDS) {
+    const l = await apiFetch(`/list/${cfg.id}`);
+    courseAreaLists.push({ id: l.id, name: cfg.name || l.name });
   }
-
-  // listas dentro de folders do espaço (caso existam subfolders)
-  const foldersData = await apiFetch(`/space/${trilhaSpace.id}/folder?archived=false`);
-  for (const fo of (foldersData.folders || [])) {
-    const flData = await apiFetch(`/folder/${fo.id}/list?archived=false`);
-    for (const l of (flData.lists || [])) {
-      const n = l.name.toLowerCase();
-      if (n.includes('membro')) memberListFound = l;
-      else courseAreaLists.push({ id: l.id, name: l.name });
-    }
-  }
-
-  if (!memberListFound) throw new Error('Lista "Membros" não encontrada no espaço da Trilha.');
-  if (!courseAreaLists.length) throw new Error('Nenhuma lista de cursos encontrada no espaço da Trilha.');
-
-  memberListId = memberListFound.id;
 
   // info no step 2
   const folderInfoEl = document.getElementById('folder-info');
   if (folderInfoEl) {
     folderInfoEl.innerHTML = `
       <span style="display:inline-flex;align-items:center;gap:8px;background:var(--sky-light);padding:8px 14px;border-radius:var(--radius);border:1px solid var(--border);flex-wrap:wrap;">
-         <strong>${trilhaSpace.name}</strong>
+         <strong>${trilhaSpaceName}</strong>
          <span style="color:var(--muted)">·</span>
         <span style="color:var(--muted)">${courseAreaLists.length} lista(s) de cursos</span>
         <span style="color:var(--muted)">·</span>
@@ -323,7 +325,7 @@ async function loadWorkspace() {
   document.getElementById('section-lists').classList.remove('section-hidden');
   document.getElementById('num-2').classList.add('done');
   document.getElementById('num-2').textContent = '✓';
-  showMsg('msg-connect', `✓ Conectado ao espaço "${trilhaSpace.name}"!`, 'success');
+  showMsg('msg-connect', `✓ Conectado às listas de "${trilhaSpaceName}"!`, 'success');
 
   await resolveCreationStatus();
   await loadMembers();
@@ -346,7 +348,7 @@ function normalizeStatus(s) {
 // ── ÁREA/SOLUÇÃO DO CURSO (via Custom Field do ClickUp) ────────────
 // Tanto "Por área" quanto "Por soluções" agrupam os cursos usando o
 // mesmo mecanismo no ClickUp: um Custom Field (o "Grupo: ..." que
-// aparece no topo da lista) — não Tags. As Tags continuam existindo nos
+// aparece no topo da lista), não Tags. As Tags continuam existindo nos
 // cursos, mas com vários valores não-exclusivos por curso, então usá-las
 // pra agrupar misturava tudo; por isso não são mais usadas para isso
 // (continuam aparecendo como badge informativo ao lado do nome do curso).
@@ -369,7 +371,7 @@ function resolveCustomFieldLabel(field) {
     const opt = opts.find(o => ids.includes(o.id));
     return opt ? (opt.label || opt.name || null) : null;
   }
-  // texto simples, número, etc. — usa o valor bruto se for utilizável
+  // texto simples, número, etc. usa o valor bruto se for utilizável
   if (typeof field.value === 'string' && field.value.trim()) return field.value.trim();
   return null;
 }
@@ -645,7 +647,7 @@ async function loadDashboard() {
     }
     summaryHtml += '</div>';
 
-    // detalhe por membro — fica ESCONDIDO por padrão (display:none no
+    // detalhe por membro fica ESCONDIDO por padrão (display:none no
     // wrapper); só aparece quando a pessoa clica num card lá em cima
     // (ver applyDashboardFilter, que também garante que só o detalhe do
     // membro clicado fica visível ali dentro).
@@ -720,7 +722,7 @@ function applyDashboardFilter() {
   });
 
   // o bloco de detalhe inteiro só aparece quando algum membro está
-  // selecionado — sem clique nenhum, fica escondido
+  // selecionado. Sem clique nenhum, fica escondido
   const detailWrap = document.getElementById('dash-detail-wrap');
   if (detailWrap) detailWrap.style.display = dashboardFilterKey ? '' : 'none';
 
