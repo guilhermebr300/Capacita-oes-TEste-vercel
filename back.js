@@ -269,7 +269,7 @@ async function connectWithManualKey() {
 const MEMBER_LIST_ID = '901714402152';
 
 const COURSE_LIST_IDS = [
-  { id: '901714460234', name: 'Por área' },
+  { id: '901714460234', name: 'área' },
   { id: '901714910963', name: 'Solução' },
   // { id: 'COLOQUE_AQUI_O_ID', name: 'Por área' },
   // { id: 'COLOQUE_AQUI_O_ID', name: 'Por soluções' },
