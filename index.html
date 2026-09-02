@@ -273,7 +273,7 @@ window.autoConnectPatched = async function() {
   } catch(e) {
     const msg = e.message || 'Erro desconhecido';
     setConnStatus('error', 'Falha: ' + msg);
-    showMsg('msg-connect', '⚠ ' + msg + ' — cole sua API Key abaixo para continuar.', 'warn');
+    showMsg('msg-connect', '⚠ ' + msg + 'cole sua API Key abaixo para continuar.', 'warn');
     document.getElementById('fallback-wrap').style.display = 'block';
     // abre o painel automaticamente
     const body = document.getElementById('fallback-body');
