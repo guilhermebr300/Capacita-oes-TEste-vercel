@@ -166,7 +166,12 @@ async function getTaskDetailCached(task) {
     return cached.data; // nada mudou no ClickUp desde a última vez, usa o cache
   }
   try {
-    const data = await apiFetch(`/task/${task.id}`);
+    // include_markdown_description=true é obrigatório aqui: sem esse
+    // parâmetro o ClickUp nem devolve o campo markdown_description, e a
+    // gente cai de volta pro "description" em texto puro, que descarta a
+    // URL quando o link foi colado como aqueles cards/embeds bonitos do
+    // ClickUp (fica só o texto visível, sem o link de verdade).
+    const data = await apiFetch(`/task/${task.id}?include_markdown_description=true`);
     taskDetailCache[task.id] = { date_updated: task.date_updated, data };
     return data;
   } catch (e) {
@@ -266,7 +271,7 @@ async function connectWithManualKey() {
 const MEMBER_LIST_ID = '901714402152';
  
 const COURSE_LIST_IDS = [
-  { id: '901714460234', name: 'área' },
+  { id: '901714460234', name: 'Por área' },
   { id: '901714910963', name: 'Solução' },
 ];
 
