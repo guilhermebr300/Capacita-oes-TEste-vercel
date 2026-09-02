@@ -263,12 +263,14 @@ async function connectWithManualKey() {
 //   3. O link é tipo https://app.clickup.com/9012345/v/li/901234567890
 //      → o número final (901234567890) é o ID
 //
-// PREENCHER AQUI(troque os placeholders pelos IDs reais)
-const MEMBER_LIST_ID = 'https://app.clickup.com/90171288669/v/li/901714402152';
+// IMPORTANTE: aqui embaixo só entra o NÚMERO final do link, não a URL
+// inteira. Colar a URL completa quebra todas as chamadas (apiFetch monta
+// `/list/${ID}`, e com a URL inteira isso vira uma rota inválida no proxy).
+const MEMBER_LIST_ID = '901714402152';
 
 const COURSE_LIST_IDS = [
-  {id:'https://app.clickup.com/90171288669/v/li/901714460234', name: 'Por área'},
-  {id:'https://app.clickup.com/90171288669/v/li/901714910963', name: 'Solução'},
+  { id: '901714460234', name: 'Por área' },
+  { id: '901714910963', name: 'Solução' },
   // { id: 'COLOQUE_AQUI_O_ID', name: 'Por área' },
   // { id: 'COLOQUE_AQUI_O_ID', name: 'Por soluções' },
 ];
