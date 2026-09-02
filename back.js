@@ -1,6 +1,5 @@
 const BASE = '/api/proxy';
 let allCourses = [], memberListId = null;
-let workspaceMembers = [];
 let currentUserEmail = '';
 
 // ── EMAIL salvo no navegador ──────────────────────────────
@@ -65,7 +64,7 @@ function buildHeaders(extra) {
 // O ClickUp limita ~100 req/min por token. Sem isso, qualquer Promise.all
 // no código (ex: buscar detalhes de N tasks em paralelo) dispara tudo de
 // uma vez e estoura 429 assim que o volume de dados cresce.
-const MAX_CONCURRENT = 10;   // requisições simultâneas permitidas ao ClickUp
+const MAX_CONCURRENT = 4;   // requisições simultâneas permitidas ao ClickUp
 const RETRY_LIMIT = 5;      // tentativas em caso de 429 antes de desistir
 let activeRequests = 0;
 const requestQueue = [];
@@ -246,22 +245,27 @@ async function connectWithManualKey() {
   }
 }
 
-//WORKSPACE
-// IDs FIXOS DAS LISTAS 
+// ── WORKSPACE ─────────────────────────────────────────────
+// IDs FIXOS DAS LISTAS ─────────────────────────────────────
+// O Space "Trilha de Capacitações" é privado no ClickUp. Convidados/membros
+// com acesso liberado só nas listas (não no Space inteiro) não conseguem
+// listar Spaces via API (/team/{id}/space não retorna Spaces privados pra
+// quem não foi adicionado neles), por isso a descoberta automática do
+// Space quebrava com "Espaço não encontrado" mesmo a pessoa tendo acesso
+// de verdade às listas de dentro dele.
+// Solução: pular a descoberta do Space e ir direto nas listas por ID fixo.
+// Isso funciona porque acesso de lista é independente de acesso ao Space.
+//
 // COMO PEGAR O ID DE UMA LISTA NO CLICKUP:
 //   1. Abra a lista no ClickUp
 //   2. Clique nos "..." ao lado do nome da lista → Copy link
 //   3. O link é tipo https://app.clickup.com/9012345/v/li/901234567890
 //      → o número final (901234567890) é o ID
 //
-// IMPORTANTE: aqui embaixo só entra o NÚMERO final do link, não a URL
-// inteira. Colar a URL completa quebra todas as chamadas (apiFetch monta
-// `/list/${ID}`, e com a URL inteira isso vira uma rota inválida no proxy).
-const MEMBER_LIST_ID = '901714402152';
+// PREENCHER AQUI 👇 (troque os placeholders pelos IDs reais)
+const MEMBER_LIST_ID = 'COLOQUE_AQUI_O_ID_DA_LISTA_MEMBROS';
 
 const COURSE_LIST_IDS = [
-  { id: '901714460234', name: 'área' },
-  { id: '901714910963', name: 'Solução' },
   // { id: 'COLOQUE_AQUI_O_ID', name: 'Por área' },
   // { id: 'COLOQUE_AQUI_O_ID', name: 'Por soluções' },
 ];
@@ -278,20 +282,6 @@ async function loadWorkspace() {
     throw new Error('MEMBER_LIST_ID ainda não foi preenchido no código (back.js).');
   if (!COURSE_LIST_IDS.length)
     throw new Error('COURSE_LIST_IDS ainda não foi preenchido no código (back.js).');
-
-  const teams = await apiFetch('/team');
-  if (!teams.teams?.length) throw new Error('Nenhum workspace encontrado.');
-  const teamId = teams.teams[0].id;
-
-  // membros do workspace
-  try {
-    const teamData = await apiFetch(`/team/${teamId}`);
-    workspaceMembers = (teamData.team?.members || []).map(m => ({
-      id: String(m.user.id),
-      name: m.user.username || m.user.email,
-      email: m.user.email,
-    }));
-  } catch(e) { workspaceMembers = []; }
 
   // busca a lista de Membros direto pelo ID (sem passar pelo Space)
   const memberList = await apiFetch(`/list/${MEMBER_LIST_ID}`);
@@ -323,8 +313,46 @@ async function loadWorkspace() {
   showMsg('msg-connect', `✓ Conectado às listas de "${trilhaSpaceName}"!`, 'success');
 
   await resolveCreationStatus();
+  await loadMemberFieldOptions();
   await loadMembers();
   await loadCoursesByArea();
+}
+
+// ── MEMBROS via Custom Field (não mais assignee do ClickUp) ──
+// A lista de membros não vem mais de um escaneamento do workspace
+// inteiro; ela é lida direto das opções do Custom Field "Membros" que já
+// existe na própria lista de Membros no ClickUp (o dropdown colorido,
+// um valor por pessoa). Isso garante que só aparecem as pessoas que
+// fazem sentido pra essa trilha, e evita depender de acesso a
+// informação do workspace que convidados/membros restritos podem não
+// ter. Na hora de copiar os cursos, esse mesmo Custom Field é o que fica
+// preenchido em cada task nova (em vez do "responsável"/assignee nativo
+// do ClickUp).
+let memberFieldId = null;
+let memberFieldType = null; // 'drop_down' ou 'labels'
+let memberOptions = []; // [{id, name, color}] - id é o da OPÇÃO do campo, não da pessoa
+
+async function loadMemberFieldOptions() {
+  memberFieldId = null;
+  memberFieldType = null;
+  memberOptions = [];
+
+  const fieldsData = await apiFetch(`/list/${memberListId}/field`);
+  const fields = fieldsData.fields || [];
+  const field = fields.find(f => normalizeStatus(f.name).includes('membro'));
+  if (!field) throw new Error('Custom Field "Membros" não encontrado na lista de Membros.');
+  if (field.type !== 'drop_down' && field.type !== 'labels')
+    throw new Error(`Custom Field "Membros" precisa ser Drop Down ou Labels (tipo atual: ${field.type}).`);
+
+  memberFieldId = field.id;
+  memberFieldType = field.type;
+  const opts = field.type_config?.options || [];
+  memberOptions = opts
+    .slice()
+    .sort((a, b) => (a.orderindex ?? 0) - (b.orderindex ?? 0))
+    .map(o => ({ id: o.id, name: o.name || o.label || '(sem nome)', color: o.color || null }));
+
+  if (!memberOptions.length) throw new Error('Custom Field "Membros" não tem nenhuma opção cadastrada.');
 }
 
 // ── STATUS REAL PARA NOVAS TAREFAS ────────────────────────
@@ -476,19 +504,20 @@ async function loadMembers() {
     const el = document.getElementById('members-list');
     document.getElementById('section-members').classList.remove('section-hidden');
 
-    if (!workspaceMembers.length) {
-      el.innerHTML = '<span class="empty">Nenhum membro encontrado no workspace.</span>';
+    if (!memberOptions.length) {
+      el.innerHTML = '<span class="empty">Nenhuma opção encontrada no Custom Field "Membros".</span>';
       return;
     }
-    document.getElementById('count-members').textContent = workspaceMembers.length + ' membros';
+    document.getElementById('count-members').textContent = memberOptions.length + ' membros';
 
     let html = `<label class="select-all-row"><input type="checkbox" onchange="toggleAll('member',this.checked)"> Selecionar todos</label>
     <div class="list-grid">`;
-    for (const m of workspaceMembers) {
+    for (const m of memberOptions) {
       const safeId = m.id.replace(/[^a-zA-Z0-9]/g, '_');
+      const dot = m.color ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${m.color};margin-right:6px"></span>` : '';
       html += `<div class="check-item" id="ci-m-${safeId}">
         <input type="checkbox" class="chk-member" value="${m.id}" onchange="onCheck(this,'ci-m-${safeId}')">
-        <label onclick="this.previousElementSibling.click()">${m.name}${m.email ? ` <span style="color:var(--muted);font-weight:400">(${m.email})</span>` : ''}</label>
+        <label onclick="this.previousElementSibling.click()">${dot}${m.name}</label>
       </div>`;
     }
     html += '</div>';
@@ -522,7 +551,7 @@ function updateSummary() {
       ? `com status inicial "<strong>${creationStatusName}</strong>"`
       : `com o status padrão da lista <span style="color:var(--warn)">(nenhum status "em progresso" encontrado)</span>`;
     document.getElementById('summary').innerHTML =
-      `Serão criadas <strong>${nc * nm}</strong> tarefa(s): <strong>${nc}</strong> curso(s) × <strong>${nm}</strong> membro(s), atribuídas diretamente como responsável no ClickUp, ${statusInfo}.`;
+      `Serão criadas <strong>${nc * nm}</strong> tarefa(s): <strong>${nc}</strong> curso(s) × <strong>${nm}</strong> membro(s), com o Custom Field "Membros" já preenchido, ${statusInfo}.`;
   } else {
     sect.classList.add('section-hidden');
   }
@@ -542,12 +571,20 @@ async function copyCourses() {
   hideMsg('msg-result');
 
   for (const memberId of selectedMemberIds) {
-    const member = workspaceMembers.find(m => m.id === memberId);
+    const member = memberOptions.find(m => m.id === memberId);
     const memberLabel = member ? member.name : memberId;
     for (const course of courses) {
       document.getElementById('progress-label').textContent = `Copiando "${course.name}" → "${memberLabel}"...`;
       try {
-        const body = { name: course.name, assignees: [parseInt(memberId)] };
+        // valor esperado pelo ClickUp ao ESCREVER num Custom Field:
+        // drop_down = id da opção (string/UUID); labels = array de ids.
+        // Repare que isso é diferente do que vem ao LER a task de volta
+        // (onde drop_down vira o orderindex, ver resolveCustomFieldLabel).
+        const fieldValue = memberFieldType === 'labels' ? [memberId] : memberId;
+        const body = {
+          name: course.name,
+          custom_fields: [{ id: memberFieldId, value: fieldValue }],
+        };
         if (creationStatusName) body.status = creationStatusName;
         if (course.markdown_description) body.markdown_description = course.markdown_description;
         else if (course.description) body.description = course.description;
@@ -578,9 +615,9 @@ async function copyCourses() {
   );
 }
 
-// ── DASHBOARD (agrupado por Responsável/assignee) ─────────
+// ── DASHBOARD (agrupado pelo Custom Field "Membros") ──────
 async function loadDashboard() {
-  if (!memberListId) {
+  if (!memberListId || !memberFieldId) {
     document.getElementById('dashboard-body').innerHTML = '<div class="dash-loading">Conecte primeiro na aba Copiar cursos.</div>';
     return;
   }
@@ -588,19 +625,25 @@ async function loadDashboard() {
   try {
     const tasks = await apiFetchAllPages(`/list/${memberListId}/task?archived=false&subtasks=true&include_closed=true&`);
 
-    const byMember = {}; // key -> { name, tasks: [] }
-    for (const t of tasks) {
-      const assignees = (t.assignees && t.assignees.length) ? t.assignees : [{ id: '_sem', username: 'Sem responsável' }];
-      for (const a of assignees) {
-        const key = String(a.id);
-        if (!byMember[key]) byMember[key] = { name: a.username || a.email || 'Sem responsável', tasks: [] };
-        byMember[key].tasks.push(t);
-      }
-    }
-
     const details = await Promise.all(tasks.map(t => getTaskDetailCached(t).catch(()=>null)));
     const detailMap = {};
     for (const d of details) if (d) detailMap[d.id] = d;
+
+    // agrupa pelo valor do Custom Field "Membros" da task (não mais pelo
+    // assignee nativo do ClickUp, já que a atribuição agora é feita por
+    // esse campo). Usa o detalhe completo (detailMap) porque só ele traz
+    // o type_config necessário pra decodificar o valor do drop_down.
+    const byMember = {}; // key -> { name, tasks: [] }
+    for (const t of tasks) {
+      const detail = detailMap[t.id] || t;
+      const fields = detail.custom_fields || [];
+      const memberField = fields.find(f => f.id === memberFieldId);
+      const label = memberField ? resolveCustomFieldLabel(memberField) : null;
+      const key = label || '_sem';
+      const name = label || 'Sem membro';
+      if (!byMember[key]) byMember[key] = { name, tasks: [] };
+      byMember[key].tasks.push(t);
+    }
 
     const memberKeys = Object.keys(byMember).sort((a,b) => byMember[a].name.localeCompare(byMember[b].name));
     if (!memberKeys.length) {
