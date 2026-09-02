@@ -65,7 +65,7 @@ function buildHeaders(extra) {
 // O ClickUp limita ~100 req/min por token. Sem isso, qualquer Promise.all
 // no código (ex: buscar detalhes de N tasks em paralelo) dispara tudo de
 // uma vez e estoura 429 assim que o volume de dados cresce.
-const MAX_CONCURRENT = 4;   // requisições simultâneas permitidas ao ClickUp
+const MAX_CONCURRENT = 10;   // requisições simultâneas permitidas ao ClickUp
 const RETRY_LIMIT = 5;      // tentativas em caso de 429 antes de desistir
 let activeRequests = 0;
 const requestQueue = [];
@@ -246,17 +246,8 @@ async function connectWithManualKey() {
   }
 }
 
-// ── WORKSPACE ─────────────────────────────────────────────
-// IDs FIXOS DAS LISTAS ─────────────────────────────────────
-// O Space "Trilha de Capacitações" é privado no ClickUp. Convidados/membros
-// com acesso liberado só nas listas (não no Space inteiro) não conseguem
-// listar Spaces via API (/team/{id}/space não retorna Spaces privados pra
-// quem não foi adicionado neles), por isso a descoberta automática do
-// Space quebrava com "Espaço não encontrado" mesmo a pessoa tendo acesso
-// de verdade às listas de dentro dele.
-// Solução: pular a descoberta do Space e ir direto nas listas por ID fixo.
-// Isso funciona porque acesso de lista é independente de acesso ao Space.
-//
+//WORKSPACE
+// IDs FIXOS DAS LISTAS 
 // COMO PEGAR O ID DE UMA LISTA NO CLICKUP:
 //   1. Abra a lista no ClickUp
 //   2. Clique nos "..." ao lado do nome da lista → Copy link
