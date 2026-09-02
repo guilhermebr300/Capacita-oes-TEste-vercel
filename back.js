@@ -264,9 +264,9 @@ async function connectWithManualKey() {
 //
 // PREENCHER AQUI 👇 (troque os placeholders pelos IDs reais)
 const MEMBER_LIST_ID = '901714402152';
-
+ 
 const COURSE_LIST_IDS = [
- { id: '901714460234', name: 'área' },
+  { id: '901714460234', name: 'área' },
   { id: '901714910963', name: 'Solução' },
 ];
 
