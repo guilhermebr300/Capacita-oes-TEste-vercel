@@ -3,24 +3,24 @@ export const config = { api: { bodyParser: true } };
 const ALLOWED_DOMAIN = 'estatjr.com.br';
 const TIMEOUT_MS = 15000; // 15 segundos max
 
-// Client ID gerado no Google Cloud Console (não é segredo — é seguro
+// Client ID gerado no Google Cloud Console (não é segredo, é seguro
 // deixar ele fixo aqui, é o mesmo valor que já fica público no index.html).
 const GOOGLE_CLIENT_ID = '286209182292-l8cvud3b33hp5fapdum6tqg4sk2dcfqg.apps.googleusercontent.com';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-User-Email');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-User-Email, X-Manual-Key');
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
 
   // ── login com Google (verificação real) ───────────────
   // Fica ANTES da checagem de X-User-Email de propósito: é justamente
-  // aqui que a gente descobre e confirma qual é o email da pessoa —
+  // aqui que a gente descobre e confirma qual é o email da pessoa,
   // ainda não existe um email "de confiança" antes desse passo.
   // O front-end (handleGoogleCredential em back.js) manda o token (JWT)
   // que o Google devolveu depois do login. Esse token PODE ter sido
   // forjado por qualquer um no navegador, então nunca confiamos nele
-  // sem checar — em vez disso, perguntamos pro próprio Google "esse
+  // sem checar, em vez disso, perguntamos pro próprio Google "esse
   // token é seu mesmo, e pra quem ele pertence?" através do endpoint
   // oficial de tokeninfo. Só depois disso o email é considerado válido.
   if (req.query.path === 'google-login') {
@@ -75,7 +75,14 @@ export default async function handler(req, res) {
 
   if (!rawPath) { res.status(400).json({ error: 'path obrigatório' }); return; }
 
-  const apiKey = process.env.CLICKUP_API_KEY;
+  // ── escolhe qual API Key usar ──────────────────────────
+  // Prioridade: key manual mandada pelo front (header X-Manual-Key) primeiro.
+  // Isso é o que permite cada pessoa usar a própria key quando a key fixa
+  // do servidor (env var) não tem acesso ao que ela precisa (ex: Space
+  // privado). Sem essa prioridade, a key manual colada na tela nunca era
+  // usada de verdade, o proxy sempre caía na env var por baixo dos panos.
+  const manualKey = (req.headers['x-manual-key'] || '').trim();
+  const apiKey = manualKey || process.env.CLICKUP_API_KEY;
   if (!apiKey) {
     res.status(500).json({ error: 'CLICKUP_API_KEY não configurada na Vercel.' }); return;
   }
@@ -105,6 +112,20 @@ export default async function handler(req, res) {
 
     const r = await fetch(fullUrl, options);
     clearTimeout(timer);
+    const contentType = r.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      // o ClickUp (ou algo no meio do caminho) devolveu algo que não é
+      // JSON, isso normalmente indica Authorization inválido/vazio.
+      // Devolvemos um JSON de erro em vez de deixar o front quebrar ao
+      // tentar dar .json() num corpo que não é JSON.
+      const rawText = await r.text();
+      res.status(r.status || 502).json({
+        error: 'ClickUp retornou uma resposta inesperada (não-JSON). A API Key usada pode estar inválida ou expirada.',
+        status: r.status,
+        preview: rawText.slice(0, 200),
+      });
+      return;
+    }
     const data = await r.json();
     res.status(r.status).json(data);
   } catch (e) {
