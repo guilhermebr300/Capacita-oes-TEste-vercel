@@ -263,11 +263,11 @@ async function connectWithManualKey() {
 //      → o número final (901234567890) é o ID
 //
 // PREENCHER AQUI 👇 (troque os placeholders pelos IDs reais)
-const MEMBER_LIST_ID = 'COLOQUE_AQUI_O_ID_DA_LISTA_MEMBROS';
+const MEMBER_LIST_ID = '901714402152';
 
 const COURSE_LIST_IDS = [
-  // { id: 'COLOQUE_AQUI_O_ID', name: 'Por área' },
-  // { id: 'COLOQUE_AQUI_O_ID', name: 'Por soluções' },
+ { id: '901714460234', name: 'área' },
+  { id: '901714910963', name: 'Solução' },
 ];
 
 let courseAreaLists = []; // [{id, name}], cada lista é uma área de cursos
