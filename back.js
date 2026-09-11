@@ -319,8 +319,58 @@ async function loadWorkspace() {
 
   await resolveCreationStatus();
   await loadMemberFieldOptions();
+  await loadProgressFieldConfig();
   await loadMembers();
   await loadCoursesByArea();
+}
+
+// ── PROGRESSO via Custom Field nativo (não mais pelo checklist) ──────
+// A lista de Membros passou a ter um Custom Field do tipo "progress" do
+// próprio ClickUp (aquela bolinha que se arrasta na coluna "Progresso").
+// Antes a gente calculava % concluído contando itens marcados no
+// checklist; agora o valor de verdade é esse campo, então o dashboard lê
+// ele em vez de contar checklist. Campos "progress" tem um intervalo
+// (start/end) e um valor atual dentro desse intervalo. A % exibida é
+// (valor atual - start) / (end - start).
+let progressFieldId = null;
+let progressFieldRange = { start: 0, end: 100 };
+
+async function loadProgressFieldConfig() {
+  progressFieldId = null;
+  progressFieldRange = { start: 0, end: 100 };
+  try {
+    const fieldsData = await apiFetch(`/list/${memberListId}/field`);
+    const fields = fieldsData.fields || [];
+    const field = fields.find(f => f.type === 'progress' || normalizeStatus(f.name).includes('progresso'));
+    if (field) {
+      progressFieldId = field.id;
+      progressFieldRange = {
+        start: field.type_config?.start ?? 0,
+        end: field.type_config?.end ?? 100,
+      };
+    }
+  } catch(e) {
+    // se não achar o campo por algum motivo, getTaskProgressPct cai de
+    // volta pro cálculo antigo via checklist (ver função abaixo)
+  }
+}
+
+// Calcula a % de progresso de uma task: usa o Custom Field "Progresso"
+// quando ele existe e já tem valor preenchido; se a task ainda não tem
+// esse campo preenchido (ex: curso recém-criado), cai de volta pro
+// cálculo antigo via checklist, pra não mostrar tudo zerado à toa.
+function getTaskProgressPct(detail) {
+  const fields = detail?.custom_fields || [];
+  const field = progressFieldId ? fields.find(f => f.id === progressFieldId) : null;
+  if (field && field.value !== null && field.value !== undefined) {
+    const { start, end } = progressFieldRange;
+    const span = end - start;
+    if (span > 0) return Math.max(0, Math.min(100, Math.round(((field.value - start) / span) * 100)));
+  }
+  const cls = detail?.checklists || [];
+  const total = cls.reduce((a,cl) => a+(cl.items?.length||0), 0);
+  const done = cls.reduce((a,cl) => a+(cl.items?.filter(i=>i.resolved).length||0), 0);
+  return total > 0 ? Math.round((done/total)*100) : 0;
 }
 
 // ── MEMBROS via Custom Field (não mais assignee do ClickUp) ──
@@ -660,14 +710,11 @@ async function loadDashboard() {
     let summaryHtml = '<div class="dash-summary-grid">';
     for (const key of memberKeys) {
       const { name, tasks: memberTasks } = byMember[key];
-      let totalAll = 0, doneAll = 0;
-      for (const task of memberTasks) {
-        const d = detailMap[task.id];
-        const cls = d?.checklists || [];
-        totalAll += cls.reduce((a,cl) => a+(cl.items?.length||0), 0);
-        doneAll  += cls.reduce((a,cl) => a+(cl.items?.filter(i=>i.resolved).length||0), 0);
+      let pctAll = 0;
+      if (memberTasks.length) {
+        const soma = memberTasks.reduce((a, task) => a + getTaskProgressPct(detailMap[task.id]), 0);
+        pctAll = Math.round(soma / memberTasks.length);
       }
-      const pctAll = totalAll > 0 ? Math.round((doneAll/totalAll)*100) : 0;
       const ring = '#2E96D9'; // azul da Estat (mesma cor de marca usada no resto do site)
       summaryHtml += `
         <div class="dash-member-card" data-member-key="${key}" onclick="filterDashboardMember('${key}')" title="Clique para ver só ${name}">
@@ -684,7 +731,7 @@ async function loadDashboard() {
           </div>
           <div class="dash-card-info">
             <div class="dash-card-name">${name}</div>
-            <div class="dash-card-meta">${memberTasks.length} curso(s) · ${doneAll}/${totalAll} itens</div>
+            <div class="dash-card-meta">${memberTasks.length} curso(s) · média ${pctAll}%</div>
           </div>
         </div>`;
     }
@@ -708,10 +755,7 @@ async function loadDashboard() {
         detailHtml += `<div class="dash-courses">`;
         for (const task of memberTasks) {
           const d = detailMap[task.id];
-          const cls = d?.checklists || [];
-          const totalItems = cls.reduce((a,cl) => a+(cl.items?.length||0), 0);
-          const doneItems  = cls.reduce((a,cl) => a+(cl.items?.filter(i=>i.resolved).length||0), 0);
-          const pct = totalItems > 0 ? Math.round((doneItems/totalItems)*100) : 0;
+          const pct = getTaskProgressPct(d);
           const isClosed = task.status?.type === 'closed';
           const barColor = '#2E96D9'; // azul da Estat
           detailHtml += `<div class="dash-course-row">
@@ -723,7 +767,6 @@ async function loadDashboard() {
               <div class="dash-progress-bar">
                 <div class="dash-progress-fill" style="width:${pct}%;background:${barColor}"></div>
               </div>
-              <span class="dash-pct">${doneItems}/${totalItems} itens</span>
             </div>
           </div>`;
         }
