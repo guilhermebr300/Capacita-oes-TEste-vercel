@@ -1,6 +1,11 @@
 export const config = { api: { bodyParser: true } };
 
-const ALLOWED_DOMAIN = 'estatjr.com.br';
+// Lista de domínios liberados pra logar. Pra adicionar mais um domínio no
+// futuro, é só colocar mais uma linha aqui.
+const ALLOWED_DOMAINS = ['estatjr.com.br', 'dac.unicamp.br'];
+function isAllowedEmail(email) {
+  return ALLOWED_DOMAINS.some(d => email.endsWith('@' + d));
+}
 const TIMEOUT_MS = 15000; // 15 segundos max
 
 // Client ID gerado no Google Cloud Console (não é segredo, é seguro
@@ -47,8 +52,8 @@ export default async function handler(req, res) {
         res.status(401).json({ error: 'Email do Google não verificado.' }); return;
       }
       const email = (payload.email || '').toLowerCase();
-      if (!email.endsWith('@' + ALLOWED_DOMAIN)) {
-        res.status(403).json({ error: 'Acesso restrito a contas @' + ALLOWED_DOMAIN }); return;
+      if (!isAllowedEmail(email)) {
+        res.status(403).json({ error: 'Acesso restrito a contas @' + ALLOWED_DOMAINS.join(' ou @') }); return;
       }
       res.status(200).json({ ok: true, email });
     } catch (e) {
@@ -62,8 +67,8 @@ export default async function handler(req, res) {
   if (!userEmail) {
     res.status(401).json({ error: 'Email não informado.' }); return;
   }
-  if (!userEmail.endsWith('@' + ALLOWED_DOMAIN)) {
-    res.status(403).json({ error: 'Acesso restrito a emails @' + ALLOWED_DOMAIN }); return;
+  if (!isAllowedEmail(userEmail)) {
+    res.status(403).json({ error: 'Acesso restrito a emails @' + ALLOWED_DOMAINS.join(' ou @') }); return;
   }
 
   const rawPath = req.query.path;
